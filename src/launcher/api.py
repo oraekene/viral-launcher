@@ -3,16 +3,20 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import AsyncIterator
+from typing import Annotated, AsyncIterator
 
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session, sessionmaker
 
 from launcher import __version__
+from launcher.config import Settings
+from launcher.cost import BudgetExceeded
 from launcher.features import extract
 from launcher.gate import GateReport, load_engine
-from launcher.models import CostEvent, Draft, GateRule, ParamVersion
+from launcher.models import CostEvent, Draft, DraftVariant, GateRule, ParamVersion
+from launcher.params import ParamStore
+from launcher.rewriter import HeuristicProvider, OpenAICompatProvider, VariantProvider, rewrite_flow
 from launcher.seed import seed_all
 
 
@@ -60,6 +64,58 @@ class CostSummaryOut(BaseModel):
     events: int
 
 
+class RewriteIn(BaseModel):
+    n: int | None = Field(default=None, ge=1, le=50)
+
+
+class RankedVariantOut(BaseModel):
+    id: int
+    text: str
+    score: float
+    reasons: list[str]
+
+
+class RewriteOut(BaseModel):
+    draft_id: int
+    top: list[RankedVariantOut]
+    generated: int
+    vetoed_count: int
+    cost_usd: float
+
+
+class VariantRowOut(BaseModel):
+    id: int
+    text: str
+    variant_index: int
+    score: float
+    reasons: list[str]
+    gate_lines: list[GateLineOut]
+    vetoed: bool
+
+
+class CostEventOut(BaseModel):
+    kind: str
+    usd: float
+    tokens_in: int
+    tokens_out: int
+    note: str | None
+
+
+class BatchIn(BaseModel):
+    items: list[DraftIn] = Field(min_length=1, max_length=100)
+    rewrite: bool = False
+    n: int | None = Field(default=None, ge=1, le=50)
+
+
+class BatchResultOut(BaseModel):
+    draft: DraftOut
+    rewrite: RewriteOut | None
+
+
+class BatchOut(BaseModel):
+    results: list[BatchResultOut]
+
+
 def _report_lines(report: GateReport) -> list[GateLineOut]:
     return [
         GateLineOut(
@@ -82,7 +138,13 @@ def _draft_out(draft: Draft) -> DraftOut:
     )
 
 
-def create_app(session_factory: sessionmaker[Session]) -> FastAPI:
+def create_app(
+    session_factory: sessionmaker[Session],
+    settings: Settings | None = None,
+    provider: VariantProvider | None = None,
+) -> FastAPI:
+    resolved_settings = settings or Settings.from_env()
+
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         with session_factory() as session:
@@ -102,6 +164,13 @@ def create_app(session_factory: sessionmaker[Session]) -> FastAPI:
             raise
         finally:
             session.close()
+
+    def get_provider(session: Session = Depends(get_session)) -> VariantProvider:
+        if provider is not None:
+            return provider
+        if resolved_settings.llm_api_key:
+            return OpenAICompatProvider(resolved_settings, ParamStore(session))
+        return HeuristicProvider()
 
     @app.post("/drafts", status_code=201, response_model=DraftOut)
     def create_draft(
@@ -182,5 +251,89 @@ def create_app(session_factory: sessionmaker[Session]) -> FastAPI:
         return CostSummaryOut(
             total_usd=round(sum(e.usd for e in events), 6), events=len(events)
         )
+
+    @app.post("/drafts/{draft_id}/rewrite", response_model=RewriteOut)
+    def rewrite_draft(
+        draft_id: int,
+        data: RewriteIn,
+        session: Session = Depends(get_session),
+        variant_provider: VariantProvider = Depends(get_provider),
+    ) -> RewriteOut:
+        try:
+            result = rewrite_flow(session, draft_id, variant_provider, n=data.n)
+        except BudgetExceeded as exc:
+            raise HTTPException(status_code=402, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return RewriteOut(
+            draft_id=result.draft_id,
+            top=[
+                RankedVariantOut(id=v.id, text=v.text, score=v.score, reasons=list(v.reasons))
+                for v in result.top
+            ],
+            generated=result.generated,
+            vetoed_count=result.vetoed_count,
+            cost_usd=result.cost_usd,
+        )
+
+    @app.get("/drafts/{draft_id}/variants", response_model=list[VariantRowOut])
+    def list_variants(
+        draft_id: int, session: Session = Depends(get_session)
+    ) -> list[VariantRowOut]:
+        if session.get(Draft, draft_id) is None:
+            raise HTTPException(status_code=404, detail="draft not found")
+        rows = (
+            session.query(DraftVariant)
+            .filter_by(draft_id=draft_id)
+            .order_by(DraftVariant.variant_index)
+            .all()
+        )
+        return [
+            VariantRowOut(
+                id=r.id,
+                text=r.text,
+                variant_index=r.variant_index,
+                score=r.score,
+                reasons=list(r.reasons or []),
+                gate_lines=[GateLineOut(**line) for line in (r.gate_lines or [])],
+                vetoed=r.vetoed,
+            )
+            for r in rows
+        ]
+
+    @app.get("/drafts/{draft_id}/costs", response_model=list[CostEventOut])
+    def list_draft_costs(
+        draft_id: int, session: Session = Depends(get_session)
+    ) -> list[CostEventOut]:
+        if session.get(Draft, draft_id) is None:
+            raise HTTPException(status_code=404, detail="draft not found")
+        events = (
+            session.query(CostEvent).filter_by(draft_id=draft_id).order_by(CostEvent.id).all()
+        )
+        return [
+            CostEventOut(
+                kind=e.kind,
+                usd=e.usd,
+                tokens_in=e.tokens_in,
+                tokens_out=e.tokens_out,
+                note=e.note,
+            )
+            for e in events
+        ]
+
+    @app.post("/drafts/batch", response_model=BatchOut)
+    def batch_drafts(
+        data: BatchIn, session: Session = Depends(get_session)
+    ) -> BatchOut:
+        results: list[BatchResultOut] = []
+        for item in data.items:
+            draft_out = create_draft(item, session)
+            rewrite_out: RewriteOut | None = None
+            if data.rewrite:
+                rewrite_out = rewrite_draft(
+                    draft_out.id, RewriteIn(n=data.n), session, get_provider(session)
+                )
+            results.append(BatchResultOut(draft=draft_out, rewrite=rewrite_out))
+        return BatchOut(results=results)
 
     return app

@@ -1,0 +1,109 @@
+from __future__ import annotations
+
+import pytest
+from sqlalchemy.orm import Session
+
+from launcher.cost import BudgetExceeded, CostMeter
+from launcher.models import Draft, DraftVariant
+from launcher.params import seed_params
+from launcher.rewriter import (
+    GenerationResult,
+    HeuristicProvider,
+    RewriteResult,
+    rewrite_flow,
+)
+from launcher.rules_seed import seed_rules
+
+
+class FakeProvider:
+    def __init__(self, texts: list[str], usd: float = 0.0) -> None:
+        self._texts = texts
+        self._usd = usd
+
+    def generate(self, draft_text: str, n: int) -> GenerationResult:
+        return GenerationResult(
+            texts=tuple(self._texts[:n]), usd=self._usd, tokens_in=0, tokens_out=0
+        )
+
+    def estimate_cost(self, draft_text: str, n: int) -> float:
+        return self._usd
+
+
+@pytest.fixture()
+def seeded(session: Session) -> Session:
+    seed_params(session)
+    seed_rules(session)
+    d = Draft(text="We cut onboarding from 14 days to 2. Fear was the constraint.")
+    session.add(d)
+    session.flush()
+    session.commit()
+    return session
+
+
+def test_heuristic_provider_is_deterministic() -> None:
+    text = "We just really cut onboarding from 14 days to 2. It was fear, actually."
+    first = HeuristicProvider().generate(text, n=10)
+    second = HeuristicProvider().generate(text, n=10)
+    assert first.texts == second.texts
+    assert len(first.texts) > 0
+
+
+def test_heuristic_provider_costs_nothing() -> None:
+    result = HeuristicProvider().generate("Some text here.", n=5)
+    assert result.usd == 0.0
+
+
+def test_flow_ranks_survivors_and_excludes_vetoed(seeded: Session) -> None:
+    provider = FakeProvider(
+        [
+            "Like if you agree! Tag someone who needs this.",
+            "Fear was the constraint. What would you add?",
+        ]
+    )
+    draft = seeded.query(Draft).one()
+    result = rewrite_flow(seeded, draft.id, provider, n=2)
+    assert isinstance(result, RewriteResult)
+    assert result.vetoed_count == 1
+    assert all(v.text != "Like if you agree! Tag someone who needs this." for v in result.top)
+    assert len(result.top) <= 3
+    scores = [v.score for v in result.top]
+    assert scores == sorted(scores, reverse=True)
+
+
+def test_flow_includes_original_as_candidate(seeded: Session) -> None:
+    provider = FakeProvider([])
+    draft = seeded.query(Draft).one()
+    result = rewrite_flow(seeded, draft.id, provider, n=1)
+    assert any(v.text == draft.text for v in result.top)
+
+
+def test_flow_persists_variants_with_gate_lines(seeded: Session) -> None:
+    provider = FakeProvider(["Fear was the constraint. What would you add?"])
+    draft = seeded.query(Draft).one()
+    rewrite_flow(seeded, draft.id, provider, n=1)
+    rows = seeded.query(DraftVariant).order_by(DraftVariant.variant_index).all()
+    assert len(rows) == 2
+    for row in rows:
+        assert row.gate_lines
+        assert all("source_note" in line for line in row.gate_lines)
+
+
+def test_flow_records_cost_event(seeded: Session) -> None:
+    provider = FakeProvider(["A variant."], usd=0.02)
+    draft = seeded.query(Draft).one()
+    result = rewrite_flow(seeded, draft.id, provider, n=1)
+    assert abs(result.cost_usd - 0.02) < 1e-9
+    assert CostMeter(seeded).spent(draft.id) > 0
+
+
+def test_per_draft_cap_blocks_repeat_paid_rewrite(seeded: Session) -> None:
+    provider = FakeProvider(["A variant."], usd=0.06)
+    draft = seeded.query(Draft).one()
+    rewrite_flow(seeded, draft.id, provider, n=1)
+    with pytest.raises(BudgetExceeded):
+        rewrite_flow(seeded, draft.id, provider, n=1)
+
+
+def test_missing_draft_raises(seeded: Session) -> None:
+    with pytest.raises(ValueError):
+        rewrite_flow(seeded, 9999, FakeProvider([]), n=1)

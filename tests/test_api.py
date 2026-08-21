@@ -8,11 +8,26 @@ from sqlalchemy.pool import StaticPool
 
 from launcher.api import create_app
 from launcher.models import Base
+from launcher.rewriter import GenerationResult, HeuristicProvider
 from launcher.seed import seed_all
 
 
-@pytest.fixture()
-def client() -> TestClient:
+class StaticPaidProvider(HeuristicProvider):
+    def __init__(self, usd: float) -> None:
+        self._usd = usd
+
+    def generate(self, draft_text: str, n: int) -> GenerationResult:
+        texts = tuple(
+            f"{draft_text.rstrip('.')}. Variant {i}.\n\nWhat would you add?"
+            for i in range(1, max(n, 1))
+        )
+        return GenerationResult(texts=texts, usd=self._usd, tokens_in=10, tokens_out=20)
+
+    def estimate_cost(self, draft_text: str, n: int) -> float:
+        return self._usd
+
+
+def _make_client(provider: object | None = None) -> TestClient:
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -23,7 +38,12 @@ def client() -> TestClient:
     with factory() as s:
         seed_all(s)
         s.commit()
-    return TestClient(create_app(factory))
+    return TestClient(create_app(factory, provider=provider))  # type: ignore[arg-type]
+
+
+@pytest.fixture()
+def client() -> TestClient:
+    return _make_client()
 
 
 CLEAN_DRAFT = (
@@ -82,3 +102,102 @@ def test_costs_summary_starts_at_zero(client: TestClient) -> None:
 
 def test_blank_draft_rejected(client: TestClient) -> None:
     assert client.post("/drafts", json={"text": ""}).status_code == 422
+
+
+def test_rewrite_returns_ranked_top3(client: TestClient) -> None:
+    created = client.post("/drafts", json={"text": CLEAN_DRAFT}).json()
+    resp = client.post(f"/drafts/{created['id']}/rewrite", json={"n": 5})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["draft_id"] == created["id"]
+    assert 1 <= len(body["top"]) <= 3
+    scores = [v["score"] for v in body["top"]]
+    assert scores == sorted(scores, reverse=True)
+    assert all(v["reasons"] for v in body["top"])
+    assert body["cost_usd"] == 0.0
+    assert body["vetoed_count"] >= 0
+
+
+def test_rewrite_missing_draft_404(client: TestClient) -> None:
+    assert client.post("/drafts/9999/rewrite", json={"n": 3}).status_code == 404
+
+
+def test_rewrite_excludes_vetoed_variants() -> None:
+    class BaitProvider(HeuristicProvider):
+        def generate(self, draft_text: str, n: int) -> GenerationResult:
+            return GenerationResult(
+                texts=(
+                    "Like if you agree! Tag someone who needs this.",
+                    "Fear was the constraint. What would you add?",
+                ),
+                usd=0.0,
+                tokens_in=0,
+                tokens_out=0,
+            )
+
+        def estimate_cost(self, draft_text: str, n: int) -> float:
+            return 0.0
+
+    client = _make_client(BaitProvider())
+    created = client.post(
+        "/drafts", json={"text": "We cut onboarding from 14 days to 2."}
+    ).json()
+    body = client.post(f"/drafts/{created['id']}/rewrite", json={"n": 2}).json()
+    assert body["vetoed_count"] == 1
+    assert all("Like if" not in v["text"] for v in body["top"])
+
+
+def test_per_draft_cap_blocks_second_paid_rewrite_with_402() -> None:
+    client = _make_client(StaticPaidProvider(usd=0.06))
+    created = client.post("/drafts", json={"text": CLEAN_DRAFT}).json()
+    first = client.post(f"/drafts/{created['id']}/rewrite", json={"n": 2})
+    assert first.status_code == 200
+    second = client.post(f"/drafts/{created['id']}/rewrite", json={"n": 2})
+    assert second.status_code == 402
+    assert "cap" in second.json()["detail"].lower()
+
+
+def test_variants_persisted_and_queryable(client: TestClient) -> None:
+    created = client.post("/drafts", json={"text": CLEAN_DRAFT}).json()
+    client.post(f"/drafts/{created['id']}/rewrite", json={"n": 4})
+    variants = client.get(f"/drafts/{created['id']}/variants").json()
+    assert len(variants) >= 2
+    original_rows = [v for v in variants if v["text"] == CLEAN_DRAFT]
+    assert len(original_rows) == 1
+    for row in variants:
+        assert isinstance(row["vetoed"], bool)
+        assert row["gate_lines"]
+
+
+def test_batch_creates_drafts_without_rewrite(client: TestClient) -> None:
+    resp = client.post(
+        "/drafts/batch",
+        json={"items": [{"text": CLEAN_DRAFT}, {"text": "Short one https://x.com"}]},
+    )
+    assert resp.status_code == 200
+    results = resp.json()["results"]
+    assert len(results) == 2
+    assert results[0]["draft"]["verdict"] == "passed"
+    assert results[0]["rewrite"] is None
+
+
+def test_batch_with_rewrite_populates_results(client: TestClient) -> None:
+    resp = client.post(
+        "/drafts/batch",
+        json={
+            "items": [{"text": CLEAN_DRAFT}, {"text": "Second draft about shipping fast."}],
+            "rewrite": True,
+            "n": 3,
+        },
+    )
+    results = resp.json()["results"]
+    assert all(r["rewrite"] is not None for r in results)
+    assert all(r["rewrite"]["cost_usd"] == 0.0 for r in results)
+
+
+def test_draft_costs_listing(client: TestClient) -> None:
+    created = client.post("/drafts", json={"text": CLEAN_DRAFT}).json()
+    client.post(f"/drafts/{created['id']}/rewrite", json={"n": 2})
+    events = client.get(f"/drafts/{created['id']}/costs").json()
+    assert len(events) == 1
+    assert events[0]["kind"] == "heuristic"
