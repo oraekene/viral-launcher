@@ -34,6 +34,12 @@ class ProviderError(RuntimeError):
     pass
 
 
+def default_provider(settings: Settings, store: ParamStore) -> VariantProvider:
+    if settings.llm_api_key:
+        return OpenAICompatProvider(settings, store)
+    return HeuristicProvider()
+
+
 FILLER_WORDS: tuple[str, ...] = (
     "just",
     "really",
@@ -141,14 +147,55 @@ class OpenAICompatProvider:
         usage = payload.get("usage", {})
         tokens_in = int(usage.get("prompt_tokens", 0))
         tokens_out = int(usage.get("completion_tokens", 0))
+        texts = self._parse_texts(content)
+        if len(texts) < n:
+            top_up = httpx.post(
+                f"{self._settings.llm_base_url}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {self._settings.llm_api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": self._settings.llm_model,
+                    "messages": [
+                        {"role": "system", "content": system},
+                        {
+                            "role": "user",
+                            "content": (
+                                f"{draft_text}\n\nProduce {n - len(texts)} more "
+                                "variants, same format."
+                            ),
+                        },
+                    ],
+                    "n": 1,
+                    "temperature": 1.0,
+                },
+                timeout=30.0,
+            )
+            if top_up.status_code == 200:
+                top_payload = top_up.json()
+                top_usage = top_payload.get("usage", {})
+                tokens_in += int(top_usage.get("prompt_tokens", 0))
+                tokens_out += int(top_usage.get("completion_tokens", 0))
+                merged = [*texts, *self._parse_texts(
+                    top_payload["choices"][0]["message"]["content"]
+                )]
+                deduped: list[str] = []
+                for t in merged:
+                    if t not in deduped:
+                        deduped.append(t)
+                texts = tuple(deduped[:n])
         usd = self._cost_usd(tokens_in, tokens_out)
-        texts = tuple(
+        return GenerationResult(
+            texts=texts, usd=usd, tokens_in=tokens_in, tokens_out=tokens_out
+        )
+
+    @staticmethod
+    def _parse_texts(content: str) -> tuple[str, ...]:
+        return tuple(
             line.lstrip("- ").strip()
             for line in content.splitlines()
             if line.strip().startswith("-")
-        )
-        return GenerationResult(
-            texts=texts, usd=usd, tokens_in=tokens_in, tokens_out=tokens_out
         )
 
     def _cost_usd(self, tokens_in: int, tokens_out: int) -> float:
@@ -168,6 +215,7 @@ class RankedVariant:
     text: str
     score: float
     reasons: tuple[str, ...]
+    gate_lines: tuple[dict[str, str], ...]
 
 
 @dataclass(frozen=True)
@@ -230,15 +278,7 @@ def rewrite_flow(
             variant_index=idx,
             score=score,
             reasons=reasons,
-            gate_lines=[
-                {
-                    "rule_id": line.rule_id,
-                    "verdict": line.verdict,
-                    "detail": line.detail,
-                    "source_note": line.source_note,
-                }
-                for line in report.lines
-            ],
+            gate_lines=[line.as_dict() for line in report.lines],
             vetoed=vetoed,
             llm_cost_usd=round(per_variant_cost, 6),
         )
@@ -258,7 +298,13 @@ def rewrite_flow(
 
     survivors.sort(key=lambda pair: pair[1], reverse=True)
     top = tuple(
-        RankedVariant(id=row.id, text=row.text, score=row.score, reasons=tuple(row.reasons))
+        RankedVariant(
+            id=row.id,
+            text=row.text,
+            score=row.score,
+            reasons=tuple(row.reasons),
+            gate_lines=tuple(row.gate_lines or ()),
+        )
         for row, _ in survivors[:3]
     )
     return RewriteResult(

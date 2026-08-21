@@ -16,12 +16,18 @@ from launcher.features import extract
 from launcher.gate import GateReport, load_engine
 from launcher.models import CostEvent, Draft, DraftVariant, GateRule, ParamVersion
 from launcher.params import ParamStore
-from launcher.rewriter import HeuristicProvider, OpenAICompatProvider, VariantProvider, rewrite_flow
+from launcher.rewriter import (
+    RewriteResult,
+    VariantProvider,
+    default_provider,
+    rewrite_flow,
+)
 from launcher.seed import seed_all
 
 
 class DraftIn(BaseModel):
     text: str = Field(min_length=1, max_length=4000)
+    project_id: str | None = Field(default=None, max_length=64)
     author_followers: int | None = None
     mutuals_count: int | None = None
     scheduled_at: datetime | None = None
@@ -73,6 +79,7 @@ class RankedVariantOut(BaseModel):
     text: str
     score: float
     reasons: list[str]
+    gate_lines: list[GateLineOut]
 
 
 class RewriteOut(BaseModel):
@@ -81,6 +88,7 @@ class RewriteOut(BaseModel):
     generated: int
     vetoed_count: int
     cost_usd: float
+    error: str | None = None
 
 
 class VariantRowOut(BaseModel):
@@ -117,15 +125,7 @@ class BatchOut(BaseModel):
 
 
 def _report_lines(report: GateReport) -> list[GateLineOut]:
-    return [
-        GateLineOut(
-            rule_id=line.rule_id,
-            verdict=line.verdict,
-            detail=line.detail,
-            source_note=line.source_note,
-        )
-        for line in report.lines
-    ]
+    return [GateLineOut(**line.as_dict()) for line in report.lines]
 
 
 def _draft_out(draft: Draft) -> DraftOut:
@@ -168,9 +168,7 @@ def create_app(
     def get_provider(session: Session = Depends(get_session)) -> VariantProvider:
         if provider is not None:
             return provider
-        if resolved_settings.llm_api_key:
-            return OpenAICompatProvider(resolved_settings, ParamStore(session))
-        return HeuristicProvider()
+        return default_provider(resolved_settings, ParamStore(session))
 
     @app.post("/drafts", status_code=201, response_model=DraftOut)
     def create_draft(
@@ -187,12 +185,13 @@ def create_app(
         report = engine.evaluate(features)
         draft = Draft(
             text=data.text,
+            project_id=data.project_id,
             author_followers=data.author_followers,
             mutuals_count=data.mutuals_count,
             scheduled_at=data.scheduled_at,
             allow_premium_length=data.allow_premium_length,
             verdict=report.verdict,
-            gate_report=[line.model_dump() for line in _report_lines(report)],
+            gate_report=[line.as_dict() for line in report.lines],
         )
         session.add(draft)
         session.flush()
@@ -265,16 +264,7 @@ def create_app(
             raise HTTPException(status_code=402, detail=str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
-        return RewriteOut(
-            draft_id=result.draft_id,
-            top=[
-                RankedVariantOut(id=v.id, text=v.text, score=v.score, reasons=list(v.reasons))
-                for v in result.top
-            ],
-            generated=result.generated,
-            vetoed_count=result.vetoed_count,
-            cost_usd=result.cost_usd,
-        )
+        return _rewrite_out(result)
 
     @app.get("/drafts/{draft_id}/variants", response_model=list[VariantRowOut])
     def list_variants(
@@ -330,10 +320,40 @@ def create_app(
             draft_out = create_draft(item, session)
             rewrite_out: RewriteOut | None = None
             if data.rewrite:
-                rewrite_out = rewrite_draft(
-                    draft_out.id, RewriteIn(n=data.n), session, get_provider(session)
-                )
+                try:
+                    result = rewrite_flow(
+                        session, draft_out.id, get_provider(session), n=data.n
+                    )
+                    rewrite_out = _rewrite_out(result)
+                except BudgetExceeded as exc:
+                    rewrite_out = RewriteOut(
+                        draft_id=draft_out.id,
+                        top=[],
+                        generated=0,
+                        vetoed_count=0,
+                        cost_usd=0.0,
+                        error=str(exc),
+                    )
             results.append(BatchResultOut(draft=draft_out, rewrite=rewrite_out))
         return BatchOut(results=results)
 
     return app
+
+
+def _rewrite_out(result: RewriteResult) -> RewriteOut:
+    return RewriteOut(
+        draft_id=result.draft_id,
+        top=[
+            RankedVariantOut(
+                id=v.id,
+                text=v.text,
+                score=v.score,
+                reasons=list(v.reasons),
+                gate_lines=[GateLineOut(**line) for line in v.gate_lines],
+            )
+            for v in result.top
+        ],
+        generated=result.generated,
+        vetoed_count=result.vetoed_count,
+        cost_usd=result.cost_usd,
+    )

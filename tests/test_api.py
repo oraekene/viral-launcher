@@ -201,3 +201,47 @@ def test_draft_costs_listing(client: TestClient) -> None:
     events = client.get(f"/drafts/{created['id']}/costs").json()
     assert len(events) == 1
     assert events[0]["kind"] == "heuristic"
+
+
+def test_top3_includes_gate_verdicts(client: TestClient) -> None:
+    created = client.post("/drafts", json={"text": CLEAN_DRAFT}).json()
+    body = client.post(f"/drafts/{created['id']}/rewrite", json={"n": 3}).json()
+    assert body["top"]
+    for variant in body["top"]:
+        assert variant["gate_lines"]
+        assert all(l["source_note"] for l in variant["gate_lines"])
+
+
+def test_batch_continues_past_budget_block() -> None:
+    client = _make_client(StaticPaidProvider(usd=0.50))
+    resp = client.post(
+        "/drafts/batch",
+        json={
+            "items": [{"text": CLEAN_DRAFT}, {"text": "Second draft about shipping."}],
+            "rewrite": True,
+            "n": 2,
+        },
+    )
+    assert resp.status_code == 200
+    results = resp.json()["results"]
+    assert len(results) == 2
+    for r in results:
+        rewrite = r["rewrite"]
+        assert rewrite is not None
+        assert rewrite["error"] is not None
+        assert "cap" in rewrite["error"].lower()
+        assert rewrite["top"] == []
+
+
+def test_scheduling_beyond_48h_warns(client: TestClient) -> None:
+    from datetime import datetime, timedelta, timezone
+
+    future = datetime.now(timezone.utc) + timedelta(hours=72)
+    resp = client.post(
+        "/drafts",
+        json={"text": CLEAN_DRAFT, "scheduled_at": future.isoformat()},
+    )
+    lines = {l["rule_id"]: l for l in resp.json()["gate_report"]}
+    timing = lines["timing.engagement_window"]
+    assert timing["verdict"] == "warn"
+    assert "48" in timing["detail"]

@@ -40,6 +40,7 @@ class Draft(Base):
     __tablename__ = "drafts"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     text: Mapped[str] = mapped_column(String(4000))
     author_followers: Mapped[int | None] = mapped_column(Integer, nullable=True)
     mutuals_count: Mapped[int | None] = mapped_column(Integer, nullable=True)

@@ -11,18 +11,7 @@ from launcher.features import extract
 from launcher.gate import load_engine
 from launcher.models import Draft
 from launcher.params import ParamStore
-from launcher.rewriter import (
-    HeuristicProvider,
-    OpenAICompatProvider,
-    VariantProvider,
-    rewrite_flow,
-)
-
-
-def _pick_provider(settings: Settings, session: object) -> VariantProvider:
-    if settings.llm_api_key:
-        return OpenAICompatProvider(settings, ParamStore(session))  # type: ignore[arg-type]
-    return HeuristicProvider()
+from launcher.rewriter import default_provider, rewrite_flow
 
 
 def _gate_payload(settings: Settings, args: argparse.Namespace) -> dict[str, object]:
@@ -38,15 +27,7 @@ def _gate_payload(settings: Settings, args: argparse.Namespace) -> dict[str, obj
         report = engine.evaluate(features)
         return {
             "verdict": report.verdict,
-            "lines": [
-                {
-                    "rule_id": line.rule_id,
-                    "verdict": line.verdict,
-                    "detail": line.detail,
-                    "source_note": line.source_note,
-                }
-                for line in report.lines
-            ],
+            "lines": [line.as_dict() for line in report.lines],
         }
 
 
@@ -60,7 +41,7 @@ def _rewrite_payload(settings: Settings, args: argparse.Namespace) -> dict[str, 
         )
         session.add(draft)
         session.flush()
-        provider = _pick_provider(settings, session)
+        provider = default_provider(settings, ParamStore(session))
         result = rewrite_flow(session, draft.id, provider, n=args.n)
         session.commit()
         return {
@@ -87,7 +68,7 @@ def _batch_payload(settings: Settings, args: argparse.Namespace) -> dict[str, ob
     factory = bootstrap(settings.database_url)
     results: list[dict[str, object]] = []
     with factory() as session:
-        provider = _pick_provider(settings, session)
+        provider = default_provider(settings, ParamStore(session))
         for item in items:
             text = str(item.get("text", "")).strip()
             if not text:
