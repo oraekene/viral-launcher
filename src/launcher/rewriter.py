@@ -13,6 +13,7 @@ from launcher.features import extract
 from launcher.gate import load_engine
 from launcher.models import Draft, DraftVariant
 from launcher.params import ParamStore
+from launcher.predictor import load_artifact, predict_z
 from launcher.scoring import interim_score
 
 
@@ -252,6 +253,7 @@ def rewrite_flow(
     per_variant_cost = gen.usd / max(len(gen.texts), 1)
 
     engine = load_engine(session)
+    artifact = load_artifact(session, getattr(draft, "project_id", None))
     candidates = [draft.text, *gen.texts]
     survivors: list[tuple[DraftVariant, float]] = []
     vetoed_count = 0
@@ -269,9 +271,22 @@ def rewrite_flow(
         score = 0.0
         reasons: list[str] = []
         if not vetoed:
-            result = interim_score(features, store)
-            score = result.score
-            reasons = list(result.reasons)
+            prediction = (
+                predict_z(session, draft.project_id, features) if artifact else None
+            )
+            if prediction is not None:
+                score = round(prediction.predicted_z, 4)
+                reasons = [
+                    f"predicted z {prediction.predicted_z:.2f} "
+                    f"+-{prediction.band_width:.2f} (model {prediction.model_id}, "
+                    f"{prediction.model_status})",
+                    "interim gate score "
+                    f"{interim_score(features, store).score}",
+                ]
+            else:
+                result = interim_score(features, store)
+                score = result.score
+                reasons = list(result.reasons)
         row = DraftVariant(
             draft_id=draft_id,
             text=text,

@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import Annotated, AsyncIterator
+from typing import Annotated, AsyncIterator, Literal
 
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, Field
@@ -14,8 +14,10 @@ from launcher.config import Settings
 from launcher.cost import BudgetExceeded
 from launcher.features import extract
 from launcher.gate import GateReport, load_engine
-from launcher.models import CostEvent, Draft, DraftVariant, GateRule, ParamVersion
+from launcher.models import CostEvent, Draft, DraftVariant, GateRule, ParamVersion, PredictorModel
+from launcher.outcomes import SyntheticOutcomeSource
 from launcher.params import ParamStore
+from launcher.predictor import predict_z, train_predictor
 from launcher.rewriter import (
     RewriteResult,
     VariantProvider,
@@ -122,6 +124,33 @@ class BatchResultOut(BaseModel):
 
 class BatchOut(BaseModel):
     results: list[BatchResultOut]
+
+
+class TrainIn(BaseModel):
+    project_id: str = Field(min_length=1, max_length=64)
+    source: Literal["synthetic", "radar"] = "synthetic"
+    n: int | None = Field(default=None, ge=200, le=100_000)
+
+
+class ModelOut(BaseModel):
+    id: int
+    project_id: str
+    trained_at: datetime
+    n_events: int
+    precision: float
+    recall: float
+    band_width: float
+    status: str
+    algorithm: str
+    source: str
+
+
+class ScoreOut(BaseModel):
+    scorer: Literal["predictor", "interim"]
+    predicted_z: float | None
+    band_width: float | None = None
+    model_id: int | None = None
+    model_status: str | None = None
 
 
 def _report_lines(report: GateReport) -> list[GateLineOut]:
@@ -337,7 +366,72 @@ def create_app(
             results.append(BatchResultOut(draft=draft_out, rewrite=rewrite_out))
         return BatchOut(results=results)
 
+    @app.post("/models/train", status_code=201, response_model=ModelOut)
+    def train_model(
+        data: TrainIn, session: Session = Depends(get_session)
+    ) -> ModelOut:
+        if data.source == "radar":
+            raise HTTPException(
+                status_code=501,
+                detail="radar outcome pipeline not connected; train on synthetic for now",
+            )
+        try:
+            row = train_predictor(
+                session,
+                data.project_id,
+                SyntheticOutcomeSource(n=data.n or 400),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return _model_out(row)
+
+    @app.get("/models", response_model=list[ModelOut])
+    def list_models(
+        project_id: str | None = None, session: Session = Depends(get_session)
+    ) -> list[ModelOut]:
+        query = session.query(PredictorModel).order_by(PredictorModel.id.desc())
+        if project_id is not None:
+            query = query.filter_by(project_id=project_id)
+        return [_model_out(m) for m in query.limit(100).all()]
+
+    @app.post("/drafts/{draft_id}/score", response_model=ScoreOut)
+    def score_draft(draft_id: int, session: Session = Depends(get_session)) -> ScoreOut:
+        draft = session.get(Draft, draft_id)
+        if draft is None:
+            raise HTTPException(status_code=404, detail="draft not found")
+        features = extract(
+            draft.text,
+            author_followers=draft.author_followers,
+            mutuals_count=draft.mutuals_count,
+            allow_premium_length=draft.allow_premium_length,
+        )
+        prediction = predict_z(session, draft.project_id, features)
+        if prediction is None:
+            return ScoreOut(scorer="interim", predicted_z=None)
+        return ScoreOut(
+            scorer="predictor",
+            predicted_z=prediction.predicted_z,
+            band_width=prediction.band_width,
+            model_id=prediction.model_id,
+            model_status=prediction.model_status,
+        )
+
     return app
+
+
+def _model_out(m: PredictorModel) -> ModelOut:
+    return ModelOut(
+        id=m.id,
+        project_id=m.project_id,
+        trained_at=m.trained_at,
+        n_events=m.n_events,
+        precision=m.precision,
+        recall=m.recall,
+        band_width=m.band_width,
+        status=m.status,
+        algorithm=m.algorithm,
+        source=m.source,
+    )
 
 
 def _rewrite_out(result: RewriteResult) -> RewriteOut:

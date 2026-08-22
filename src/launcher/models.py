@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, LargeBinary, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -64,6 +64,24 @@ class DraftVariant(Base):
     vetoed: Mapped[bool] = mapped_column(Boolean, default=False)
     llm_cost_usd: Mapped[float] = mapped_column(Float, default=0.0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class PredictorModel(Base):
+    __tablename__ = "predictor_models"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), index=True)
+    trained_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    n_events: Mapped[int] = mapped_column(Integer)
+    precision: Mapped[float] = mapped_column(Float)
+    recall: Mapped[float] = mapped_column(Float)
+    band_width: Mapped[float] = mapped_column(Float)
+    status: Mapped[str] = mapped_column(String(16), default="pending")
+    algorithm: Mapped[str] = mapped_column(String(64))
+    source: Mapped[str] = mapped_column(String(32))
+    feature_names: Mapped[list[str]] = mapped_column(JSON)
+    feature_importances: Mapped[dict[str, float]] = mapped_column(JSON)
+    model_blob: Mapped[bytes] = mapped_column(LargeBinary)
 
 
 class CostEvent(Base):
