@@ -100,6 +100,20 @@ class LaunchEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class Swatch(Base):
+    __tablename__ = "swatches"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    draft_id: Mapped[int] = mapped_column(ForeignKey("drafts.id"))
+    variant_id: Mapped[int | None] = mapped_column(ForeignKey("draft_variants.id"), nullable=True)
+    project_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    text: Mapped[str] = mapped_column(String(4000))
+    score: Mapped[float] = mapped_column(Float, default=0.0)
+    score_kind: Mapped[str] = mapped_column(String(16), default="interim")
+    gate_lines: Mapped[list[dict[str, str]]] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class CostEvent(Base):
     __tablename__ = "cost_events"
 

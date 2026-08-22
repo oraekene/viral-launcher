@@ -30,7 +30,10 @@ from launcher.models import (
     LaunchEvent,
     ParamVersion,
     PredictorModel,
+    Swatch,
 )
+from launcher.seed import seed_all
+from launcher.swipes import archive_swatch, list_swatches
 from launcher.outcomes import SyntheticOutcomeSource
 from launcher.params import ParamStore
 from launcher.predictor import predict_z, train_predictor
@@ -196,6 +199,22 @@ class LaunchOut(BaseModel):
     protocol_fired: str | None
     checklist: list[str]
     interventions: list[dict[str, str]]
+
+
+class SwatchIn(BaseModel):
+    draft_id: int
+    variant_id: int | None = None
+
+
+class SwatchOut(BaseModel):
+    id: int
+    draft_id: int
+    variant_id: int | None
+    project_id: str | None
+    text: str
+    score: float
+    score_kind: str
+    gate_lines: list[GateLineOut]
 
 
 def _report_lines(report: GateReport) -> list[GateLineOut]:
@@ -506,7 +525,34 @@ def create_app(
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return _launch_out(event)
 
+    @app.post("/swatches", status_code=201, response_model=SwatchOut)
+    def create_swatch(data: SwatchIn, session: Session = Depends(get_session)) -> SwatchOut:
+        try:
+            swatch = archive_swatch(session, data.draft_id, data.variant_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return _swatch_out(swatch)
+
+    @app.get("/swatches", response_model=list[SwatchOut])
+    def get_swatches(
+        project_id: str | None = None, session: Session = Depends(get_session)
+    ) -> list[SwatchOut]:
+        return [_swatch_out(s) for s in list_swatches(session, project_id)]
+
     return app
+
+
+def _swatch_out(s: Swatch) -> SwatchOut:
+    return SwatchOut(
+        id=s.id,
+        draft_id=s.draft_id,
+        variant_id=s.variant_id,
+        project_id=s.project_id,
+        text=s.text,
+        score=s.score,
+        score_kind=s.score_kind,
+        gate_lines=[GateLineOut(**line) for line in (s.gate_lines or [])],
+    )
 
 
 def _checklist_for(protocol_fired: str | None) -> list[str]:
