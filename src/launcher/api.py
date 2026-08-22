@@ -14,6 +14,7 @@ from launcher.config import Settings
 from launcher.cost import BudgetExceeded
 from launcher.features import extract
 from launcher.gate import GateReport, load_engine
+from launcher.calibration import CalibrationReport, run_calibration
 from launcher.launches import (
     DOUBLE_DOWN_CHECKLIST,
     ESCALATE_CHECKLIST,
@@ -32,11 +33,8 @@ from launcher.models import (
     PredictorModel,
     Swatch,
 )
-from launcher.seed import seed_all
-from launcher.swipes import archive_swatch, list_swatches
-from launcher.outcomes import SyntheticOutcomeSource
 from launcher.params import ParamStore
-from launcher.predictor import predict_z, train_predictor
+from launcher.predictor import active_model, predict_z, train_predictor
 from launcher.rewriter import (
     RewriteResult,
     VariantProvider,
@@ -44,6 +42,11 @@ from launcher.rewriter import (
     rewrite_flow,
 )
 from launcher.seed import seed_all
+from launcher.outcomes import (
+    SyntheticLauncherOutcomeSource,
+    SyntheticOutcomeSource,
+)
+from launcher.swipes import archive_swatch, list_swatches
 
 
 class DraftIn(BaseModel):
@@ -215,6 +218,42 @@ class SwatchOut(BaseModel):
     score: float
     score_kind: str
     gate_lines: list[GateLineOut]
+
+
+class CalibrationIn(BaseModel):
+    project_id: str = Field(min_length=1, max_length=64)
+    source: Literal["synthetic", "radar"] = "synthetic"
+    n: int | None = Field(default=None, ge=100, le=100_000)
+    winner_share: float | None = Field(default=None, gt=0.0, lt=1.0)
+
+
+class FlaggedVetoOut(BaseModel):
+    rule_name: str
+    winner_count: int
+
+
+class CalibrationReportOut(BaseModel):
+    project_id: str
+    calibrated: bool
+    n_outcomes: int
+    winner_share: float
+    new_z_trigger: float | None
+    flagged_vetoes: list[FlaggedVetoOut]
+    retrained: bool
+    reason: str
+
+
+class CalibrationStatusParam(BaseModel):
+    key: str
+    value: float
+    status: str
+    last_fit_at: datetime | None
+
+
+class CalibrationStatusOut(BaseModel):
+    project_id: str
+    params: list[CalibrationStatusParam]
+    active_model: ModelOut | None
 
 
 def _report_lines(report: GateReport) -> list[GateLineOut]:
@@ -539,7 +578,64 @@ def create_app(
     ) -> list[SwatchOut]:
         return [_swatch_out(s) for s in list_swatches(session, project_id)]
 
+    @app.post("/calibration/run", response_model=CalibrationReportOut)
+    def run_calibration_endpoint(
+        data: CalibrationIn, session: Session = Depends(get_session)
+    ) -> CalibrationReportOut:
+        if data.source == "radar":
+            raise HTTPException(
+                status_code=501,
+                detail="radar action loop not connected; calibrate on synthetic streams for now",
+            )
+        source = SyntheticLauncherOutcomeSource(
+            n=data.n or 300, winner_share=data.winner_share or 0.25
+        )
+        report = run_calibration(session, data.project_id, source)
+        return _calibration_report_out(report)
+
+    @app.get("/calibration/status", response_model=CalibrationStatusOut)
+    def calibration_status(
+        project_id: str, session: Session = Depends(get_session)
+    ) -> CalibrationStatusOut:
+        keys = ("z.trigger", "band.interim_width")
+        rows = (
+            session.query(ParamVersion)
+            .filter(ParamVersion.key.in_(keys))
+            .order_by(ParamVersion.key)
+            .all()
+        )
+        model = active_model(session, project_id)
+        return CalibrationStatusOut(
+            project_id=project_id,
+            params=[
+                CalibrationStatusParam(
+                    key=r.key,
+                    value=r.value,
+                    status=r.status,
+                    last_fit_at=r.last_fit_at,
+                )
+                for r in rows
+            ],
+            active_model=_model_out(model) if model is not None else None,
+        )
+
     return app
+
+
+def _calibration_report_out(report: CalibrationReport) -> CalibrationReportOut:
+    return CalibrationReportOut(
+        project_id=report.project_id,
+        calibrated=report.calibrated,
+        n_outcomes=report.n_outcomes,
+        winner_share=report.winner_share,
+        new_z_trigger=report.new_z_trigger,
+        flagged_vetoes=[
+            FlaggedVetoOut(rule_name=f.rule_name, winner_count=f.winner_count)
+            for f in report.flagged_vetoes
+        ],
+        retrained=report.retrained,
+        reason=report.reason,
+    )
 
 
 def _swatch_out(s: Swatch) -> SwatchOut:

@@ -23,6 +23,7 @@ class ParamVersion(Base):
     value: Mapped[float] = mapped_column(Float)
     status: Mapped[str] = mapped_column(String(16))
     source_note: Mapped[str] = mapped_column(String(512))
+    last_fit_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class GateRule(Base):
@@ -73,6 +74,7 @@ class PredictorModel(Base):
     project_id: Mapped[str] = mapped_column(String(64), index=True)
     trained_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     n_events: Mapped[int] = mapped_column(Integer)
+    training_winner_share: Mapped[float] = mapped_column(Float, default=0.5)
     precision: Mapped[float] = mapped_column(Float)
     recall: Mapped[float] = mapped_column(Float)
     band_width: Mapped[float] = mapped_column(Float)

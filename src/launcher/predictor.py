@@ -142,6 +142,7 @@ def train_predictor(
     row = PredictorModel(
         project_id=project_id,
         n_events=len(rows),
+        training_winner_share=round(sum(y_flag) / len(y_flag), 4),
         precision=round(precision, 4),
         recall=round(recall, 4),
         band_width=round(max(variance**0.5, 0.25), 4),
