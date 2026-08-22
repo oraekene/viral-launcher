@@ -53,6 +53,12 @@ PARAM_SEED: tuple[ParamSpec, ...] = (
         "radar calibration harness; refit after >=100 outcome events",
     ),
     ParamSpec(
+        "band.interim_width",
+        1.5,
+        "pending",
+        "uncalibrated interim band width; superseded by model residual std once trained",
+    ),
+    ParamSpec(
         "min_delta_t.minutes",
         10.0,
         "pending",

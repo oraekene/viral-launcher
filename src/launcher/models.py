@@ -84,6 +84,22 @@ class PredictorModel(Base):
     model_blob: Mapped[bytes] = mapped_column(LargeBinary)
 
 
+class LaunchEvent(Base):
+    __tablename__ = "launch_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    draft_id: Mapped[int] = mapped_column(ForeignKey("drafts.id"))
+    variant_id: Mapped[int | None] = mapped_column(ForeignKey("draft_variants.id"), nullable=True)
+    post_external_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    predicted_z: Mapped[float] = mapped_column(Float)
+    band_width: Mapped[float] = mapped_column(Float)
+    scorer: Mapped[str] = mapped_column(String(16))
+    actual_z_t10: Mapped[float | None] = mapped_column(Float, nullable=True)
+    protocol_fired: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    interventions: Mapped[list[dict[str, str]]] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class CostEvent(Base):
     __tablename__ = "cost_events"
 
