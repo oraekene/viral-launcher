@@ -76,8 +76,16 @@ avoidance of negative actions. Retrieval (whether the algorithm serves the
 post at all) is not controllable from the publishing side; nothing here is a
 virality guarantee. Anti-gaming rules are vetoes, not advice.
 
-## Out of scope until radar data exists
+## Radar-dependent status
 
-Ticket 03 (predictor trained on ≥200 radar outcome events), ticket 04
-(post-publish loop via the radar's own-account variant), ticket 05
-(calibration closure), ticket 06 (swipe file + Under-the-Hood labels).
+- **Predictor** trains today on `SyntheticOutcomeSource` (deterministic
+  dev corpus). Metrics on synthetic data say nothing about real-world
+  quality. The swap point is `RadarOutcomeSource`, which activates when the
+  radar build exposes alert events x outcomes in the canonical schema;
+  training with source=radar returns 501 until then.
+- **Post-publish loop** uses manual t=10 snapshot entry until the radar
+  own-account variant exists; protocol evaluation is isolated so the radar
+  adapter can call it directly.
+- **Calibration closure (ticket 05)** is intentionally unbuilt: refitting
+  thresholds without accumulated real outcomes would fabricate evidence.
+- **Under-the-Hood label check** waits on X's account-label surface.
