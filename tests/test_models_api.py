@@ -50,11 +50,12 @@ def test_train_below_min_events_rejected(client: TestClient) -> None:
     assert resp.status_code == 422
 
 
-def test_train_radar_source_not_implemented(client: TestClient) -> None:
+def test_train_radar_source_empty_stage_is_422(client: TestClient) -> None:
     resp = client.post(
         "/models/train", json={"project_id": "p", "source": "radar"}
     )
-    assert resp.status_code == 501
+    assert resp.status_code == 422
+    assert "no radar outcomes" in resp.json()["detail"].lower()
 
 
 def test_score_uses_predictor_when_model_exists(client: TestClient) -> None:

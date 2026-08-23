@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
-from typing import NamedTuple, Protocol
+from typing import Any, NamedTuple, Protocol
+
+from sqlalchemy.orm import Session
 
 from launcher.features import DraftFeatures
 
@@ -178,9 +180,90 @@ def radar_features_from_draft_features(f: DraftFeatures) -> dict[str, float]:
 
 
 class RadarOutcomeSource:
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
     def load_outcomes(self, project_id: str) -> list[OutcomeRow]:
-        raise NotImplementedError(
-            "radar outcome pipeline not connected yet; the radar build must "
-            "expose alert_events x action_outcomes mapped into the canonical "
-            "feature schema"
+        from launcher.models import RadarOutcomeStage
+
+        rows = (
+            self._session.query(RadarOutcomeStage)
+            .filter_by(project_id=project_id)
+            .order_by(RadarOutcomeStage.id)
+            .all()
         )
+        if not rows:
+            raise ValueError(
+                f"no radar outcomes imported for project {project_id!r}; "
+                "POST them to /outcomes/import first"
+            )
+        return [
+            OutcomeRow(
+                features=dict(r.features),
+                z60=r.z60,
+                value_flag=r.value_flag,
+            )
+            for r in rows
+        ]
+
+
+class StagedLauncherOutcomeSource:
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def load_outcomes(self, project_id: str) -> list[LauncherOutcomeRow]:
+        from launcher.models import RadarOutcomeStage
+
+        rows = (
+            self._session.query(RadarOutcomeStage)
+            .filter_by(project_id=project_id)
+            .order_by(RadarOutcomeStage.id)
+            .all()
+        )
+        if not rows:
+            raise ValueError(
+                f"no radar outcomes imported for project {project_id!r}; "
+                "POST them to /outcomes/import first"
+            )
+        return [
+            LauncherOutcomeRow(
+                features=dict(r.features),
+                z60=r.z60,
+                value_flag=r.value_flag,
+                fired_vetoes=tuple(r.fired_vetoes or ()),
+            )
+            for r in rows
+        ]
+
+
+def stage_radar_outcomes(
+    session: Session,
+    project_id: str,
+    rows: list[dict[str, Any]],
+) -> int:
+    from launcher.models import RadarOutcomeStage
+    from launcher.predictor import FEATURE_NAMES
+
+    required = set(FEATURE_NAMES)
+    staged: list[RadarOutcomeStage] = []
+    for i, row in enumerate(rows):
+        features = row.get("features")
+        if not isinstance(features, dict):
+            raise ValueError(f"row {i}: 'features' must be an object")
+        keys = set(features.keys())
+        if not required.issubset(keys):
+            missing = sorted(required - keys)
+            raise ValueError(f"row {i}: missing feature keys: {missing}")
+        vetoes_raw = row.get("fired_vetoes") or []
+        staged.append(
+            RadarOutcomeStage(
+                project_id=project_id,
+                z60=float(row["z60"]),
+                value_flag=bool(row["value_flag"]),
+                fired_vetoes=[str(v) for v in vetoes_raw],
+                features={k: float(features[k]) for k in required},
+            )
+        )
+    session.add_all(staged)
+    session.flush()
+    return len(staged)

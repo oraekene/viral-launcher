@@ -1,0 +1,649 @@
+FFF.FFF                                                                  [100%]
+================================== FAILURES ===================================
+___________________________ test_import_stages_rows ___________________________
+
+client = <starlette.testclient.TestClient object at 0x0000026988C4CA50>
+
+    def test_import_stages_rows(client: TestClient) -> None:
+>       resp = _import(client)
+               ^^^^^^^^^^^^^^^
+
+tests\test_radar_edge.py:54: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_radar_edge.py:47: in _import
+    return client.post(
+.venv\Lib\site-packages\starlette\testclient.py:556: in post
+    return super().post(
+.venv\Lib\site-packages\httpx\_client.py:1144: in post
+    return self.request(
+.venv\Lib\site-packages\starlette\testclient.py:455: in request
+    return super().request(
+.venv\Lib\site-packages\httpx\_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:914: in send
+    response = self._send_handling_auth(
+.venv\Lib\site-packages\httpx\_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+.venv\Lib\site-packages\httpx\_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\testclient.py:354: in handle_request
+    raise exc
+.venv\Lib\site-packages\starlette\testclient.py:351: in handle_request
+    portal.call(self.app, scope, receive, send)
+.venv\Lib\site-packages\anyio\from_thread.py:338: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\uv\python\cpython-3.11-windows-x86_64-none\Lib\concurrent\futures\_base.py:456: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\uv\python\cpython-3.11-windows-x86_64-none\Lib\concurrent\futures\_base.py:401: in __get_result
+    raise self._exception
+.venv\Lib\site-packages\anyio\from_thread.py:263: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+.venv\Lib\site-packages\starlette\applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\routing.py:670: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2734: in app
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1281: in handle
+    await super().handle(scope, receive, send)
+.venv\Lib\site-packages\starlette\routing.py:280: in handle
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:158: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\routing.py:144: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\routing.py:706: in app
+    raw_response = await run_endpoint_function(
+.venv\Lib\site-packages\fastapi\routing.py:354: in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\anyio\to_thread.py:65: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+.venv\Lib\site-packages\anyio\_backends\_asyncio.py:2641: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+.venv\Lib\site-packages\anyio\_backends\_asyncio.py:1033: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+src\launcher\api.py:626: in import_outcomes
+    imported = stage_radar_outcomes(session, data.project_id, data.rows)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\launcher\outcomes.py:248: in stage_radar_outcomes
+    features = row.get("features")
+               ^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = OutcomeRowIn(features={'char_len': 242.0, 'word_count': 50.0, 'question_count': 0.0, 'has_question': 0.0, 'has_cta': 0...: 0.0, 'swatch_similarity': 0.34818565550150676}, z60=2.296, value_flag=False, fired_vetoes=['negative.pod_signature'])
+item = 'get'
+
+    def __getattr__(self, item: str) -> Any:
+        private_attributes = object.__getattribute__(self, '__private_attributes__')
+        if item in private_attributes:
+            attribute = private_attributes[item]
+            if hasattr(attribute, '__get__'):
+                return attribute.__get__(self, type(self))  # type: ignore
+    
+            try:
+                # Note: self.__pydantic_private__ cannot be None if self.__private_attributes__ has items
+                return self.__pydantic_private__[item]  # type: ignore
+            except KeyError as exc:
+                raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}') from exc
+        else:
+            # `__pydantic_extra__` can fail to be set if the model is not yet fully initialized.
+            # See `BaseModel.__repr_args__` for more details
+            try:
+                pydantic_extra = object.__getattribute__(self, '__pydantic_extra__')
+            except AttributeError:
+                pydantic_extra = None
+    
+            if pydantic_extra and item in pydantic_extra:
+                return pydantic_extra[item]
+            else:
+                if hasattr(self.__class__, item):
+                    return super().__getattribute__(item)  # Raises AttributeError if appropriate
+                else:
+                    # this is the current error
+>                   raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}')
+E                   AttributeError: 'OutcomeRowIn' object has no attribute 'get'
+
+.venv\Lib\site-packages\pydantic\main.py:1042: AttributeError
+__________________ test_import_rejects_missing_feature_keys ___________________
+
+client = <starlette.testclient.TestClient object at 0x00000269893CC1D0>
+
+    def test_import_rejects_missing_feature_keys(client: TestClient) -> None:
+        bad = [{"features": {"char_len": 100.0}, "z60": 1.0, "value_flag": False}]
+>       resp = client.post("/outcomes/import", json={"project_id": "p", "rows": bad})
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_radar_edge.py:61: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv\Lib\site-packages\starlette\testclient.py:556: in post
+    return super().post(
+.venv\Lib\site-packages\httpx\_client.py:1144: in post
+    return self.request(
+.venv\Lib\site-packages\starlette\testclient.py:455: in request
+    return super().request(
+.venv\Lib\site-packages\httpx\_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:914: in send
+    response = self._send_handling_auth(
+.venv\Lib\site-packages\httpx\_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+.venv\Lib\site-packages\httpx\_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\testclient.py:354: in handle_request
+    raise exc
+.venv\Lib\site-packages\starlette\testclient.py:351: in handle_request
+    portal.call(self.app, scope, receive, send)
+.venv\Lib\site-packages\anyio\from_thread.py:338: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\uv\python\cpython-3.11-windows-x86_64-none\Lib\concurrent\futures\_base.py:456: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\uv\python\cpython-3.11-windows-x86_64-none\Lib\concurrent\futures\_base.py:401: in __get_result
+    raise self._exception
+.venv\Lib\site-packages\anyio\from_thread.py:263: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+.venv\Lib\site-packages\starlette\applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\routing.py:670: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2734: in app
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1281: in handle
+    await super().handle(scope, receive, send)
+.venv\Lib\site-packages\starlette\routing.py:280: in handle
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:158: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\routing.py:144: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\routing.py:706: in app
+    raw_response = await run_endpoint_function(
+.venv\Lib\site-packages\fastapi\routing.py:354: in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\anyio\to_thread.py:65: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+.venv\Lib\site-packages\anyio\_backends\_asyncio.py:2641: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+.venv\Lib\site-packages\anyio\_backends\_asyncio.py:1033: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+src\launcher\api.py:626: in import_outcomes
+    imported = stage_radar_outcomes(session, data.project_id, data.rows)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\launcher\outcomes.py:248: in stage_radar_outcomes
+    features = row.get("features")
+               ^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = OutcomeRowIn(features={'char_len': 100.0}, z60=1.0, value_flag=False, fired_vetoes=[])
+item = 'get'
+
+    def __getattr__(self, item: str) -> Any:
+        private_attributes = object.__getattribute__(self, '__private_attributes__')
+        if item in private_attributes:
+            attribute = private_attributes[item]
+            if hasattr(attribute, '__get__'):
+                return attribute.__get__(self, type(self))  # type: ignore
+    
+            try:
+                # Note: self.__pydantic_private__ cannot be None if self.__private_attributes__ has items
+                return self.__pydantic_private__[item]  # type: ignore
+            except KeyError as exc:
+                raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}') from exc
+        else:
+            # `__pydantic_extra__` can fail to be set if the model is not yet fully initialized.
+            # See `BaseModel.__repr_args__` for more details
+            try:
+                pydantic_extra = object.__getattribute__(self, '__pydantic_extra__')
+            except AttributeError:
+                pydantic_extra = None
+    
+            if pydantic_extra and item in pydantic_extra:
+                return pydantic_extra[item]
+            else:
+                if hasattr(self.__class__, item):
+                    return super().__getattribute__(item)  # Raises AttributeError if appropriate
+                else:
+                    # this is the current error
+>                   raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}')
+E                   AttributeError: 'OutcomeRowIn' object has no attribute 'get'
+
+.venv\Lib\site-packages\pydantic\main.py:1042: AttributeError
+__________________ test_train_with_radar_source_after_import __________________
+
+client = <starlette.testclient.TestClient object at 0x0000026989731E10>
+
+    def test_train_with_radar_source_after_import(client: TestClient) -> None:
+>       _import(client, project_id="radar-proj", n=400)
+
+tests\test_radar_edge.py:66: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_radar_edge.py:47: in _import
+    return client.post(
+.venv\Lib\site-packages\starlette\testclient.py:556: in post
+    return super().post(
+.venv\Lib\site-packages\httpx\_client.py:1144: in post
+    return self.request(
+.venv\Lib\site-packages\starlette\testclient.py:455: in request
+    return super().request(
+.venv\Lib\site-packages\httpx\_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:914: in send
+    response = self._send_handling_auth(
+.venv\Lib\site-packages\httpx\_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+.venv\Lib\site-packages\httpx\_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\testclient.py:354: in handle_request
+    raise exc
+.venv\Lib\site-packages\starlette\testclient.py:351: in handle_request
+    portal.call(self.app, scope, receive, send)
+.venv\Lib\site-packages\anyio\from_thread.py:338: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\uv\python\cpython-3.11-windows-x86_64-none\Lib\concurrent\futures\_base.py:456: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\uv\python\cpython-3.11-windows-x86_64-none\Lib\concurrent\futures\_base.py:401: in __get_result
+    raise self._exception
+.venv\Lib\site-packages\anyio\from_thread.py:263: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+.venv\Lib\site-packages\starlette\applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\routing.py:670: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2734: in app
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1281: in handle
+    await super().handle(scope, receive, send)
+.venv\Lib\site-packages\starlette\routing.py:280: in handle
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:158: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\routing.py:144: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\routing.py:706: in app
+    raw_response = await run_endpoint_function(
+.venv\Lib\site-packages\fastapi\routing.py:354: in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\anyio\to_thread.py:65: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+.venv\Lib\site-packages\anyio\_backends\_asyncio.py:2641: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+.venv\Lib\site-packages\anyio\_backends\_asyncio.py:1033: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+src\launcher\api.py:626: in import_outcomes
+    imported = stage_radar_outcomes(session, data.project_id, data.rows)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\launcher\outcomes.py:248: in stage_radar_outcomes
+    features = row.get("features")
+               ^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = OutcomeRowIn(features={'char_len': 242.0, 'word_count': 50.0, 'question_count': 0.0, 'has_question': 0.0, 'has_cta': 0...: 0.0, 'swatch_similarity': 0.34818565550150676}, z60=2.296, value_flag=False, fired_vetoes=['negative.pod_signature'])
+item = 'get'
+
+    def __getattr__(self, item: str) -> Any:
+        private_attributes = object.__getattribute__(self, '__private_attributes__')
+        if item in private_attributes:
+            attribute = private_attributes[item]
+            if hasattr(attribute, '__get__'):
+                return attribute.__get__(self, type(self))  # type: ignore
+    
+            try:
+                # Note: self.__pydantic_private__ cannot be None if self.__private_attributes__ has items
+                return self.__pydantic_private__[item]  # type: ignore
+            except KeyError as exc:
+                raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}') from exc
+        else:
+            # `__pydantic_extra__` can fail to be set if the model is not yet fully initialized.
+            # See `BaseModel.__repr_args__` for more details
+            try:
+                pydantic_extra = object.__getattribute__(self, '__pydantic_extra__')
+            except AttributeError:
+                pydantic_extra = None
+    
+            if pydantic_extra and item in pydantic_extra:
+                return pydantic_extra[item]
+            else:
+                if hasattr(self.__class__, item):
+                    return super().__getattribute__(item)  # Raises AttributeError if appropriate
+                else:
+                    # this is the current error
+>                   raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}')
+E                   AttributeError: 'OutcomeRowIn' object has no attribute 'get'
+
+.venv\Lib\site-packages\pydantic\main.py:1042: AttributeError
+_________________ test_calibration_radar_source_after_import __________________
+
+client = <starlette.testclient.TestClient object at 0x0000026989271C10>
+
+    def test_calibration_radar_source_after_import(client: TestClient) -> None:
+>       _import(client, project_id="cal-proj", n=250)
+
+tests\test_radar_edge.py:85: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_radar_edge.py:47: in _import
+    return client.post(
+.venv\Lib\site-packages\starlette\testclient.py:556: in post
+    return super().post(
+.venv\Lib\site-packages\httpx\_client.py:1144: in post
+    return self.request(
+.venv\Lib\site-packages\starlette\testclient.py:455: in request
+    return super().request(
+.venv\Lib\site-packages\httpx\_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:914: in send
+    response = self._send_handling_auth(
+.venv\Lib\site-packages\httpx\_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+.venv\Lib\site-packages\httpx\_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx\_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\testclient.py:354: in handle_request
+    raise exc
+.venv\Lib\site-packages\starlette\testclient.py:351: in handle_request
+    portal.call(self.app, scope, receive, send)
+.venv\Lib\site-packages\anyio\from_thread.py:338: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\uv\python\cpython-3.11-windows-x86_64-none\Lib\concurrent\futures\_base.py:456: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\uv\python\cpython-3.11-windows-x86_64-none\Lib\concurrent\futures\_base.py:401: in __get_result
+    raise self._exception
+.venv\Lib\site-packages\anyio\from_thread.py:263: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+.venv\Lib\site-packages\starlette\applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\routing.py:670: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2734: in app
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1281: in handle
+    await super().handle(scope, receive, send)
+.venv\Lib\site-packages\starlette\routing.py:280: in handle
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:158: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\routing.py:144: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\routing.py:706: in app
+    raw_response = await run_endpoint_function(
+.venv\Lib\site-packages\fastapi\routing.py:354: in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\concurrency.py:34: in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\anyio\to_thread.py:65: in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+.venv\Lib\site-packages\anyio\_backends\_asyncio.py:2641: in run_sync_in_worker_thread
+    return await future
+           ^^^^^^^^^^^^
+.venv\Lib\site-packages\anyio\_backends\_asyncio.py:1033: in run
+    result = context.run(func, *args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+src\launcher\api.py:626: in import_outcomes
+    imported = stage_radar_outcomes(session, data.project_id, data.rows)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\launcher\outcomes.py:248: in stage_radar_outcomes
+    features = row.get("features")
+               ^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = OutcomeRowIn(features={'char_len': 242.0, 'word_count': 50.0, 'question_count': 0.0, 'has_question': 0.0, 'has_cta': 0...: 0.0, 'swatch_similarity': 0.34818565550150676}, z60=2.296, value_flag=False, fired_vetoes=['negative.pod_signature'])
+item = 'get'
+
+    def __getattr__(self, item: str) -> Any:
+        private_attributes = object.__getattribute__(self, '__private_attributes__')
+        if item in private_attributes:
+            attribute = private_attributes[item]
+            if hasattr(attribute, '__get__'):
+                return attribute.__get__(self, type(self))  # type: ignore
+    
+            try:
+                # Note: self.__pydantic_private__ cannot be None if self.__private_attributes__ has items
+                return self.__pydantic_private__[item]  # type: ignore
+            except KeyError as exc:
+                raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}') from exc
+        else:
+            # `__pydantic_extra__` can fail to be set if the model is not yet fully initialized.
+            # See `BaseModel.__repr_args__` for more details
+            try:
+                pydantic_extra = object.__getattribute__(self, '__pydantic_extra__')
+            except AttributeError:
+                pydantic_extra = None
+    
+            if pydantic_extra and item in pydantic_extra:
+                return pydantic_extra[item]
+            else:
+                if hasattr(self.__class__, item):
+                    return super().__getattribute__(item)  # Raises AttributeError if appropriate
+                else:
+                    # this is the current error
+>                   raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}')
+E                   AttributeError: 'OutcomeRowIn' object has no attribute 'get'
+
+.venv\Lib\site-packages\pydantic\main.py:1042: AttributeError
+__________________________ test_radar_source_direct ___________________________
+
+session = <sqlalchemy.orm.session.Session object at 0x000002698A2F4BD0>
+
+    def test_radar_source_direct(session: Session) -> None:
+        from launcher.outcomes import stage_radar_outcomes
+    
+        rows = SyntheticOutcomeSource(n=60).load_outcomes("direct-proj")
+        staged = [
+            {
+                "features": r.features,
+                "z60": r.z60,
+                "value_flag": r.value_flag,
+                "fired_vetoes": ("negative.engagement_bait",) if r.value_flag else (),
+            }
+            for r in rows
+        ]
+        count = stage_radar_outcomes(session, "direct-proj", staged)
+        session.commit()
+        assert count == 60
+    
+>       loaded = RadarOutcomeSource("direct-proj").load_outcomes("direct-proj")
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_radar_edge.py:111: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <launcher.outcomes.RadarOutcomeSource object at 0x000002698A2F5C90>
+project_id = 'direct-proj'
+
+    def load_outcomes(self, project_id: str) -> list[OutcomeRow]:
+        from launcher.models import RadarOutcomeStage
+    
+        rows = (
+>           self._session.query(RadarOutcomeStage)
+            ^^^^^^^^^^^^^^^^^^^
+            .filter_by(project_id=project_id)
+            .order_by(RadarOutcomeStage.id)
+            .all()
+        )
+E       AttributeError: 'str' object has no attribute 'query'
+
+src\launcher\outcomes.py:188: AttributeError
+________________ test_staged_launcher_source_preserves_vetoes _________________
+
+session = <sqlalchemy.orm.session.Session object at 0x0000026988FA8450>
+
+    def test_staged_launcher_source_preserves_vetoes(session: Session) -> None:
+        from launcher.outcomes import stage_radar_outcomes
+    
+        rows = SyntheticOutcomeSource(n=30).load_outcomes("launch-proj")
+        stage_radar_outcomes(
+            session,
+            "launch-proj",
+            [
+                {
+                    "features": r.features,
+                    "z60": r.z60,
+                    "value_flag": r.value_flag,
+                    "fired_vetoes": ("negative.pod_signature",),
+                }
+                for r in rows
+            ],
+        )
+        session.commit()
+    
+>       launcher_rows = StagedLauncherOutcomeSource("launch-proj").load_outcomes("launch-proj")
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_radar_edge.py:138: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <launcher.outcomes.StagedLauncherOutcomeSource object at 0x00000269FFC12CD0>
+project_id = 'launch-proj'
+
+    def load_outcomes(self, project_id: str) -> list[LauncherOutcomeRow]:
+        from launcher.models import RadarOutcomeStage
+    
+        rows = (
+>           self._session.query(RadarOutcomeStage)
+            ^^^^^^^^^^^^^^^^^^^
+            .filter_by(project_id=project_id)
+            .order_by(RadarOutcomeStage.id)
+            .all()
+        )
+E       AttributeError: 'str' object has no attribute 'query'
+
+src\launcher\outcomes.py:216: AttributeError
+============================== warnings summary ===============================
+.venv\Lib\site-packages\fastapi\testclient.py:1
+  C:\Users\rotim\Documents\RANDOM QUESTIONS\viral-launcher\.venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_radar_edge.py::test_import_stages_rows - AttributeError: 'O...
+FAILED tests/test_radar_edge.py::test_import_rejects_missing_feature_keys - A...
+FAILED tests/test_radar_edge.py::test_train_with_radar_source_after_import - ...
+FAILED tests/test_radar_edge.py::test_calibration_radar_source_after_import
+FAILED tests/test_radar_edge.py::test_radar_source_direct - AttributeError: '...
+FAILED tests/test_radar_edge.py::test_staged_launcher_source_preserves_vetoes
+6 failed, 1 passed, 1 warning in 47.88s

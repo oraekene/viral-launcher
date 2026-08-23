@@ -26,11 +26,12 @@ def client() -> TestClient:
     return TestClient(create_app(factory))
 
 
-def test_calibration_run_radar_not_implemented(client: TestClient) -> None:
+def test_calibration_run_radar_empty_stage_is_422(client: TestClient) -> None:
     resp = client.post(
         "/calibration/run", json={"project_id": "p", "source": "radar"}
     )
-    assert resp.status_code == 501
+    assert resp.status_code == 422
+    assert "no radar outcomes" in resp.json()["detail"].lower()
 
 
 def test_calibration_run_refits_and_flips_status(client: TestClient) -> None:

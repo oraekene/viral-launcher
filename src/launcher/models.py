@@ -116,6 +116,18 @@ class Swatch(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class RadarOutcomeStage(Base):
+    __tablename__ = "radar_outcomes_stage"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), index=True)
+    z60: Mapped[float] = mapped_column(Float)
+    value_flag: Mapped[bool] = mapped_column(Boolean)
+    fired_vetoes: Mapped[list[str]] = mapped_column(JSON, default=list)
+    features: Mapped[dict[str, float]] = mapped_column(JSON)
+    imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class CostEvent(Base):
     __tablename__ = "cost_events"
 

@@ -43,8 +43,12 @@ from launcher.rewriter import (
 )
 from launcher.seed import seed_all
 from launcher.outcomes import (
+    LauncherOutcomeSource,
+    RadarOutcomeSource,
+    StagedLauncherOutcomeSource,
     SyntheticLauncherOutcomeSource,
     SyntheticOutcomeSource,
+    stage_radar_outcomes,
 )
 from launcher.similarity import max_swatch_similarity
 from launcher.swipes import archive_swatch, list_swatches
@@ -226,6 +230,18 @@ class CalibrationIn(BaseModel):
     source: Literal["synthetic", "radar"] = "synthetic"
     n: int | None = Field(default=None, ge=100, le=100_000)
     winner_share: float | None = Field(default=None, gt=0.0, lt=1.0)
+
+
+class OutcomeRowIn(BaseModel):
+    features: dict[str, float]
+    z60: float
+    value_flag: bool
+    fired_vetoes: list[str] = Field(default_factory=list, max_length=16)
+
+
+class ImportIn(BaseModel):
+    project_id: str = Field(min_length=1, max_length=64)
+    rows: list[OutcomeRowIn] = Field(min_length=1, max_length=10_000)
 
 
 class FlaggedVetoOut(BaseModel):
@@ -475,10 +491,13 @@ def create_app(
         data: TrainIn, session: Session = Depends(get_session)
     ) -> ModelOut:
         if data.source == "radar":
-            raise HTTPException(
-                status_code=501,
-                detail="radar outcome pipeline not connected; train on synthetic for now",
-            )
+            try:
+                row = train_predictor(
+                    session, data.project_id, RadarOutcomeSource(session)
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+            return _model_out(row)
         try:
             row = train_predictor(
                 session,
@@ -588,16 +607,30 @@ def create_app(
     def run_calibration_endpoint(
         data: CalibrationIn, session: Session = Depends(get_session)
     ) -> CalibrationReportOut:
-        if data.source == "radar":
-            raise HTTPException(
-                status_code=501,
-                detail="radar action loop not connected; calibrate on synthetic streams for now",
-            )
-        source = SyntheticLauncherOutcomeSource(
-            n=data.n or 300, winner_share=data.winner_share or 0.25
-        )
-        report = run_calibration(session, data.project_id, source)
+        try:
+            source: LauncherOutcomeSource
+            if data.source == "radar":
+                source = StagedLauncherOutcomeSource(session)
+            else:
+                source = SyntheticLauncherOutcomeSource(
+                    n=data.n or 300, winner_share=data.winner_share or 0.25
+                )
+            report = run_calibration(session, data.project_id, source)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         return _calibration_report_out(report)
+
+    @app.post("/outcomes/import", status_code=201)
+    def import_outcomes(
+        data: ImportIn, session: Session = Depends(get_session)
+    ) -> dict[str, int]:
+        try:
+            imported = stage_radar_outcomes(
+                session, data.project_id, [r.model_dump() for r in data.rows]
+            )
+        except (ValueError, KeyError, TypeError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return {"imported": imported}
 
     @app.get("/calibration/status", response_model=CalibrationStatusOut)
     def calibration_status(
