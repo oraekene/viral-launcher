@@ -86,6 +86,8 @@ virality guarantee. Anti-gaming rules are vetoes, not advice.
 - **Post-publish loop** uses manual t=10 snapshot entry until the radar
   own-account variant exists; protocol evaluation is isolated so the radar
   adapter can call it directly.
-- **Calibration closure (ticket 05)** is intentionally unbuilt: refitting
-  thresholds without accumulated real outcomes would fabricate evidence.
+- **Calibration closure (ticket 05)** runs z.trigger refits (F1-maximizing
+  sweep, flips `calibrated` at >=100 events), veto review flags, and
+  drift/age-triggered retrains — against synthetic outcome streams until
+  the radar action loop connects (`source=radar` returns 501).
 - **Under-the-Hood label check** waits on X's account-label surface.
