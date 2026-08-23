@@ -128,6 +128,16 @@ class RadarOutcomeStage(Base):
     imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class AccountLabel(Base):
+    __tablename__ = "account_labels"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    label_name: Mapped[str] = mapped_column(String(128))
+    meaning: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    source: Mapped[str] = mapped_column(String(16), default="manual")
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class CostEvent(Base):
     __tablename__ = "cost_events"
 

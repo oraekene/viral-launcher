@@ -23,7 +23,9 @@ from launcher.launches import (
     log_intervention,
     register_launch,
 )
+from launcher.labels import fresh_labels, label_warnings, record_label
 from launcher.models import (
+    AccountLabel,
     CostEvent,
     Draft,
     DraftVariant,
@@ -75,6 +77,7 @@ class DraftOut(BaseModel):
     text: str
     verdict: str | None
     gate_report: list[GateLineOut]
+    label_warnings: list[str]
     created_at: datetime
 
 
@@ -244,6 +247,19 @@ class ImportIn(BaseModel):
     rows: list[OutcomeRowIn] = Field(min_length=1, max_length=10_000)
 
 
+class LabelIn(BaseModel):
+    label_name: str = Field(min_length=1, max_length=128)
+    meaning: str | None = Field(default=None, max_length=512)
+
+
+class LabelOut(BaseModel):
+    id: int
+    label_name: str
+    meaning: str | None
+    source: str
+    observed_at: datetime
+
+
 class FlaggedVetoOut(BaseModel):
     rule_name: str
     winner_count: int
@@ -277,12 +293,13 @@ def _report_lines(report: GateReport) -> list[GateLineOut]:
     return [GateLineOut(**line.as_dict()) for line in report.lines]
 
 
-def _draft_out(draft: Draft) -> DraftOut:
+def _draft_out(draft: Draft, label_warnings: list[str] | None = None) -> DraftOut:
     return DraftOut(
         id=draft.id,
         text=draft.text,
         verdict=draft.verdict,
         gate_report=[GateLineOut(**line) for line in (draft.gate_report or [])],
+        label_warnings=label_warnings or [],
         created_at=draft.created_at,
     )
 
@@ -344,14 +361,14 @@ def create_app(
         )
         session.add(draft)
         session.flush()
-        return _draft_out(draft)
+        return _draft_out(draft, label_warnings(session))
 
     @app.get("/drafts/{draft_id}", response_model=DraftOut)
     def get_draft(draft_id: int, session: Session = Depends(get_session)) -> DraftOut:
         draft = session.get(Draft, draft_id)
         if draft is None:
             raise HTTPException(status_code=404, detail="draft not found")
-        return _draft_out(draft)
+        return _draft_out(draft, label_warnings(session))
 
     @app.get("/rules", response_model=list[RuleOut])
     def list_rules(session: Session = Depends(get_session)) -> list[RuleOut]:
@@ -658,7 +675,36 @@ def create_app(
             active_model=_model_out(model) if model is not None else None,
         )
 
+    @app.post("/labels", status_code=201)
+    def create_label(data: LabelIn, session: Session = Depends(get_session)) -> LabelOut:
+        label = record_label(session, data.label_name, data.meaning, "manual")
+        return _label_out(label)
+
+    @app.get("/labels", response_model=list[LabelOut])
+    def get_labels(
+        fresh_only: bool = False, session: Session = Depends(get_session)
+    ) -> list[LabelOut]:
+        if fresh_only:
+            return [_label_out(l) for l in fresh_labels(session)]
+        rows = (
+            session.query(AccountLabel)
+            .order_by(AccountLabel.observed_at.desc())
+            .limit(500)
+            .all()
+        )
+        return [_label_out(l) for l in rows]
+
     return app
+
+
+def _label_out(label: AccountLabel) -> LabelOut:
+    return LabelOut(
+        id=label.id,
+        label_name=label.label_name,
+        meaning=label.meaning,
+        source=label.source,
+        observed_at=label.observed_at,
+    )
 
 
 def _calibration_report_out(report: CalibrationReport) -> CalibrationReportOut:
