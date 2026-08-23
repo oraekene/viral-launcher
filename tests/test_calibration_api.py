@@ -39,7 +39,7 @@ def test_calibration_run_refits_and_flips_status(client: TestClient) -> None:
     assert resp.status_code == 200
     body = resp.json()
     assert body["calibrated"] is True
-    assert body["new_z_trigger"] is not None
+    assert body["applied"] is False
     assert 1.0 <= body["new_z_trigger"] <= 4.0
 
 
@@ -51,10 +51,13 @@ def test_calibration_run_at_exact_evidence_boundary(client: TestClient) -> None:
     assert body["n_outcomes"] == 100
 
 
-def test_calibration_status_shows_calibrated_param(client: TestClient) -> None:
+def test_calibration_status_after_run(client: TestClient) -> None:
+    client.post("/models/train", json={"project_id": "p", "n": 300})
     client.post("/calibration/run", json={"project_id": "p", "n": 250})
     status = client.get("/calibration/status", params={"project_id": "p"}).json()
     params = {p["key"]: p for p in status["params"]}
-    assert params["z.trigger"]["status"] == "calibrated"
-    assert params["z.trigger"]["last_fit_at"] is not None
-    assert params["band.interim_width"]["status"] == "pending"
+    assert params["z.trigger"]["status"] == "pending"
+    assert params["z.trigger"]["last_fit_at"] is None
+    assert status["active_model"] is not None
+    assert status["active_model"]["status"] == "pending"
+    assert status["active_model"]["feature_importances"]

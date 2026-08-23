@@ -60,6 +60,7 @@ class DraftVariant(Base):
     text: Mapped[str] = mapped_column(String(4000))
     variant_index: Mapped[int] = mapped_column(Integer)
     score: Mapped[float] = mapped_column(Float, default=0.0)
+    score_kind: Mapped[str] = mapped_column(String(16), default="interim")
     reasons: Mapped[list[str]] = mapped_column(JSON, default=list)
     gate_lines: Mapped[list[dict[str, str]]] = mapped_column(JSON, default=list)
     vetoed: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -75,6 +76,7 @@ class PredictorModel(Base):
     trained_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     n_events: Mapped[int] = mapped_column(Integer)
     training_winner_share: Mapped[float] = mapped_column(Float, default=0.5)
+    calibrated_z_trigger: Mapped[float | None] = mapped_column(Float, nullable=True)
     precision: Mapped[float] = mapped_column(Float)
     recall: Mapped[float] = mapped_column(Float)
     band_width: Mapped[float] = mapped_column(Float)
@@ -98,6 +100,7 @@ class LaunchEvent(Base):
     scorer: Mapped[str] = mapped_column(String(16))
     actual_z_t10: Mapped[float | None] = mapped_column(Float, nullable=True)
     protocol_fired: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    outcome_action_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     interventions: Mapped[list[dict[str, str]]] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
@@ -112,6 +115,7 @@ class Swatch(Base):
     text: Mapped[str] = mapped_column(String(4000))
     score: Mapped[float] = mapped_column(Float, default=0.0)
     score_kind: Mapped[str] = mapped_column(String(16), default="interim")
+    actual_z: Mapped[float | None] = mapped_column(Float, nullable=True)
     gate_lines: Mapped[list[dict[str, str]]] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 

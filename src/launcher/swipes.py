@@ -2,29 +2,31 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from launcher.models import Draft, DraftVariant, Swatch
+from launcher.drafts import resolve_candidate_text
+from launcher.models import Swatch
 
 
 def archive_swatch(
-    session: Session, draft_id: int, variant_id: int | None = None
+    session: Session,
+    draft_id: int,
+    variant_id: int | None = None,
+    actual_z: float | None = None,
 ) -> Swatch:
-    draft = session.get(Draft, draft_id)
-    if draft is None:
-        raise ValueError(f"draft {draft_id} not found")
+    draft, text = resolve_candidate_text(session, draft_id, variant_id)
 
-    text = draft.text
-    gate_lines: list[dict[str, str]] = list(draft.gate_report or [])
     score = 0.0
     score_kind = "interim"
+    gate_lines: list[dict[str, str]] = list(draft.gate_report or [])
 
     if variant_id is not None:
+        from launcher.models import DraftVariant
+
         variant = session.get(DraftVariant, variant_id)
-        if variant is None or variant.draft_id != draft_id:
+        if variant is None:
             raise ValueError(f"variant {variant_id} not found for draft {draft_id}")
-        text = variant.text
-        gate_lines = list(variant.gate_lines or [])
         score = variant.score
-        score_kind = "predicted" if any("predicted z" in r for r in (variant.reasons or [])) else "interim"
+        score_kind = variant.score_kind or "interim"
+        gate_lines = list(variant.gate_lines or [])
 
     swatch = Swatch(
         draft_id=draft_id,
@@ -33,6 +35,7 @@ def archive_swatch(
         text=text,
         score=score,
         score_kind=score_kind,
+        actual_z=actual_z,
         gate_lines=gate_lines,
     )
     session.add(swatch)

@@ -4,12 +4,11 @@ from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
+from launcher.drafts import resolve_candidate_text
 from launcher.features import extract
-from launcher.models import Draft, DraftVariant, LaunchEvent
+from launcher.models import LaunchEvent
 from launcher.params import ParamStore
-from launcher.predictor import predict_z
-from launcher.scoring import interim_score
-from launcher.similarity import max_swatch_similarity
+from launcher.scoring import interim_score, resolve_score
 
 DOUBLE_DOWN_CHECKLIST: tuple[str, ...] = (
     "Self-reply with a new angle or the data behind the claim",
@@ -28,6 +27,16 @@ HOLD_CHECKLIST: tuple[str, ...] = (
     "Stay available for replies",
 )
 
+_CHECKLISTS: dict[str, list[str]] = {
+    "double_down": list(DOUBLE_DOWN_CHECKLIST),
+    "escalate": list(ESCALATE_CHECKLIST),
+    "hold": list(HOLD_CHECKLIST),
+}
+
+
+def checklist_for(protocol: str | None) -> list[str]:
+    return _CHECKLISTS.get(protocol or "", [])
+
 
 @dataclass(frozen=True)
 class ProtocolCard:
@@ -41,16 +50,7 @@ def register_launch(
     post_external_id: str | None = None,
     variant_id: int | None = None,
 ) -> LaunchEvent:
-    draft = session.get(Draft, draft_id)
-    if draft is None:
-        raise ValueError(f"draft {draft_id} not found")
-
-    text = draft.text
-    if variant_id is not None:
-        variant = session.get(DraftVariant, variant_id)
-        if variant is None or variant.draft_id != draft_id:
-            raise ValueError(f"variant {variant_id} not found for draft {draft_id}")
-        text = variant.text
+    draft, text = resolve_candidate_text(session, draft_id, variant_id)
 
     features = extract(
         text,
@@ -59,11 +59,10 @@ def register_launch(
         allow_premium_length=draft.allow_premium_length,
     )
     store = ParamStore(session)
-    similarity = max_swatch_similarity(session, draft.project_id, text)
-    prediction = predict_z(session, draft.project_id, features, swatch_similarity=similarity)
-    if prediction is not None:
-        predicted_z = prediction.predicted_z
-        band_width = prediction.band_width
+    scored = resolve_score(session, draft.project_id, features, text)
+    if scored.kind == "predicted":
+        predicted_z = scored.score
+        band_width = _band_from_model(session, draft.project_id)
         scorer = "predictor"
     else:
         predicted_z = interim_score(features, store).score
@@ -81,6 +80,15 @@ def register_launch(
     session.add(event)
     session.flush()
     return event
+
+
+def _band_from_model(session: Session, project_id: str | None) -> float:
+    from launcher.predictor import load_artifact
+
+    artifact = load_artifact(session, project_id)
+    if artifact is None:
+        return ParamStore(session).get_float("band.interim_width")
+    return artifact.row.band_width
 
 
 def evaluate_protocol(predicted_z: float, band_width: float, actual_z: float) -> ProtocolCard:

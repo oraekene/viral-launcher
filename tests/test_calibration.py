@@ -28,19 +28,49 @@ def test_refuses_to_calibrate_without_evidence(seeded: Session) -> None:
     report = run_calibration(seeded, "proj", SyntheticLauncherOutcomeSource(n=50))
     assert isinstance(report, CalibrationReport)
     assert report.calibrated is False
+    assert report.applied is False
     assert report.n_outcomes == 50
+    pv = seeded.query(ParamVersion).filter_by(key="z.trigger").one()
+    assert pv.status == "pending"
+    assert pv.value == 2.5
+
+
+def test_staged_outcomes_flip_model_calibrated(seeded: Session) -> None:
+    from launcher.outcomes import StagedLauncherOutcomeSource, SyntheticOutcomeSource, stage_radar_outcomes
+
+    train_predictor(seeded, "proj", SyntheticOutcomeSource(n=300))
+    rows = [
+        {
+            "features": r.features,
+            "z60": r.z60,
+            "value_flag": r.value_flag,
+            "fired_vetoes": list(r.fired_vetoes),
+        }
+        for r in SyntheticLauncherOutcomeSource(n=250).load_outcomes("proj")
+    ]
+    stage_radar_outcomes(seeded, "proj", rows)
+
+    report = run_calibration(
+        seeded, "proj", StagedLauncherOutcomeSource(seeded)
+    )
+    assert report.calibrated is True
+    assert report.applied is True
+    model = seeded.query(PredictorModel).order_by(PredictorModel.id.desc()).first()
+    assert model is not None
+    assert model.status == "calibrated"
+    assert model.calibrated_z_trigger == report.new_z_trigger
     pv = seeded.query(ParamVersion).filter_by(key="z.trigger").one()
     assert pv.status == "pending"
 
 
-def test_z_trigger_refits_and_flips_calibrated(seeded: Session) -> None:
+def test_synthetic_run_never_writes_calibrated(seeded: Session) -> None:
+    train_predictor(seeded, "proj", SyntheticOutcomeSource(n=300))
     report = run_calibration(seeded, "proj", SyntheticLauncherOutcomeSource(n=400))
     assert report.calibrated is True
-    pv = seeded.query(ParamVersion).filter_by(key="z.trigger").one()
-    assert pv.status == "calibrated"
-    assert pv.last_fit_at is not None
-    assert 1.0 <= pv.value <= 4.0
-    assert report.new_z_trigger is not None
+    assert report.applied is False
+    model = seeded.query(PredictorModel).order_by(PredictorModel.id.desc()).first()
+    assert model is not None
+    assert model.status == "pending"
 
 
 def test_veto_contradictions_flagged_not_silently_kept(seeded: Session) -> None:

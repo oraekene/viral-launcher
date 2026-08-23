@@ -2,22 +2,22 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import NamedTuple
 
 from sqlalchemy.orm import Session
 
-from launcher.models import ParamVersion, PredictorModel, utcnow
+from launcher.metrics import precision_recall
+from launcher.models import PredictorModel, utcnow
 from launcher.outcomes import (
     LauncherOutcomeRow,
     LauncherOutcomeSource,
     OutcomeRow,
+    StagedLauncherOutcomeSource,
     SyntheticLauncherOutcomeSource,
 )
 from launcher.predictor import MIN_EVENTS, active_model, train_predictor
 
 MIN_EVIDENCE = 100
-DRIFT_THRESHOLD = 0.20
-MONTH = timedelta(days=30)
+MAX_MODEL_AGE = timedelta(days=30)
 
 
 @dataclass(frozen=True)
@@ -30,6 +30,7 @@ class FlaggedVeto:
 class CalibrationReport:
     project_id: str
     calibrated: bool
+    applied: bool
     n_outcomes: int
     winner_share: float
     new_z_trigger: float | None = None
@@ -49,6 +50,13 @@ class _LauncherAsTrainingSource:
         ]
 
 
+def _model_age(model: PredictorModel) -> timedelta:
+    trained_at = model.trained_at
+    if trained_at.tzinfo is None:
+        return utcnow().replace(tzinfo=None) - trained_at
+    return utcnow() - trained_at
+
+
 def should_retrain(
     session: Session,
     model: PredictorModel,
@@ -56,7 +64,7 @@ def should_retrain(
 ) -> bool:
     if len(rows) < MIN_EVENTS:
         return False
-    if utcnow() - model.trained_at >= MONTH:
+    if _model_age(model) >= MAX_MODEL_AGE:
         return True
     reference = model.training_winner_share or 0.5
     recent = sum(r.value_flag for r in rows) / len(rows)
@@ -65,22 +73,17 @@ def should_retrain(
     return abs(recent - reference) / reference > DRIFT_THRESHOLD
 
 
+DRIFT_THRESHOLD = 0.20
+
+
 def _best_f1_threshold(rows: list[LauncherOutcomeRow]) -> tuple[float, float]:
     candidates = sorted({r.z60 for r in rows})
     best_t = 2.5
     best_f1 = -1.0
+    flags = [r.value_flag for r in rows]
     for t in candidates:
-        tp = fp = fn = 0
-        for r in rows:
-            pred = r.z60 >= t
-            if pred and r.value_flag:
-                tp += 1
-            elif pred and not r.value_flag:
-                fp += 1
-            elif not pred and r.value_flag:
-                fn += 1
-        precision = tp / (tp + fp) if (tp + fp) else 0.0
-        recall = tp / (tp + fn) if (tp + fn) else 0.0
+        pred_flags = [r.z60 >= t for r in rows]
+        precision, recall = precision_recall(pred_flags, flags)
         f1 = (
             2 * precision * recall / (precision + recall)
             if (precision + recall)
@@ -100,23 +103,18 @@ def run_calibration(
     rows = source.load_outcomes(project_id)
 
     if len(rows) < MIN_EVIDENCE:
+        winner_share = sum(r.value_flag for r in rows) / len(rows) if rows else 0.0
         return CalibrationReport(
             project_id=project_id,
             calibrated=False,
+            applied=False,
             n_outcomes=len(rows),
-            winner_share=(
-                round(sum(r.value_flag for r in rows) / len(rows), 4) if rows else 0.0
-            ),
+            winner_share=round(winner_share, 4),
             reason=f"insufficient evidence: {len(rows)} of {MIN_EVIDENCE} required outcomes",
         )
 
     winner_share = sum(r.value_flag for r in rows) / len(rows)
-
     new_trigger, _f1 = _best_f1_threshold(rows)
-    pv = session.query(ParamVersion).filter_by(key="z.trigger").one()
-    pv.value = new_trigger
-    pv.status = "calibrated"
-    pv.last_fit_at = utcnow()
 
     veto_winners: dict[str, int] = {}
     for r in rows:
@@ -129,16 +127,28 @@ def run_calibration(
     ]
 
     retrained = False
-    reason = "z.trigger refit on launcher outcomes"
+    reason = "z.trigger refit computed on launcher outcomes"
     model = active_model(session, project_id)
+
+    source_is_real = isinstance(source, StagedLauncherOutcomeSource)
+    applied = False
+
     if model is not None and should_retrain(session, model, rows):
         train_predictor(session, project_id, _LauncherAsTrainingSource(rows))
         retrained = True
         reason += "; predictor retrained (drift or age threshold hit)"
+        model = active_model(session, project_id)
+
+    if source_is_real and model is not None:
+        model.calibrated_z_trigger = new_trigger
+        model.status = "calibrated"
+        applied = True
+        reason += "; written to the project's active model"
 
     return CalibrationReport(
         project_id=project_id,
         calibrated=True,
+        applied=applied,
         n_outcomes=len(rows),
         winner_share=round(winner_share, 4),
         new_z_trigger=new_trigger,

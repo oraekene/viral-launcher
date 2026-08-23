@@ -16,10 +16,8 @@ from launcher.features import extract
 from launcher.gate import GateReport, load_engine
 from launcher.calibration import CalibrationReport, run_calibration
 from launcher.launches import (
-    DOUBLE_DOWN_CHECKLIST,
-    ESCALATE_CHECKLIST,
-    HOLD_CHECKLIST,
     apply_snapshot,
+    checklist_for,
     log_intervention,
     register_launch,
 )
@@ -173,6 +171,8 @@ class ModelOut(BaseModel):
     status: str
     algorithm: str
     source: str
+    feature_importances: dict[str, float]
+    calibrated_z_trigger: float | None
 
 
 class ScoreOut(BaseModel):
@@ -215,6 +215,7 @@ class LaunchOut(BaseModel):
 class SwatchIn(BaseModel):
     draft_id: int
     variant_id: int | None = None
+    actual_z: float | None = Field(default=None, ge=0.0)
 
 
 class SwatchOut(BaseModel):
@@ -225,6 +226,7 @@ class SwatchOut(BaseModel):
     text: str
     score: float
     score_kind: str
+    actual_z: float | None
     gate_lines: list[GateLineOut]
 
 
@@ -268,6 +270,7 @@ class FlaggedVetoOut(BaseModel):
 class CalibrationReportOut(BaseModel):
     project_id: str
     calibrated: bool
+    applied: bool
     n_outcomes: int
     winner_share: float
     new_z_trigger: float | None
@@ -609,7 +612,7 @@ def create_app(
     @app.post("/swatches", status_code=201, response_model=SwatchOut)
     def create_swatch(data: SwatchIn, session: Session = Depends(get_session)) -> SwatchOut:
         try:
-            swatch = archive_swatch(session, data.draft_id, data.variant_id)
+            swatch = archive_swatch(session, data.draft_id, data.variant_id, data.actual_z)
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return _swatch_out(swatch)
@@ -711,6 +714,7 @@ def _calibration_report_out(report: CalibrationReport) -> CalibrationReportOut:
     return CalibrationReportOut(
         project_id=report.project_id,
         calibrated=report.calibrated,
+        applied=report.applied,
         n_outcomes=report.n_outcomes,
         winner_share=report.winner_share,
         new_z_trigger=report.new_z_trigger,
@@ -732,18 +736,13 @@ def _swatch_out(s: Swatch) -> SwatchOut:
         text=s.text,
         score=s.score,
         score_kind=s.score_kind,
+        actual_z=s.actual_z,
         gate_lines=[GateLineOut(**line) for line in (s.gate_lines or [])],
     )
 
 
 def _checklist_for(protocol_fired: str | None) -> list[str]:
-    if protocol_fired == "double_down":
-        return list(DOUBLE_DOWN_CHECKLIST)
-    if protocol_fired == "escalate":
-        return list(ESCALATE_CHECKLIST)
-    if protocol_fired == "hold":
-        return list(HOLD_CHECKLIST)
-    return []
+    return checklist_for(protocol_fired)
 
 
 def _launch_out(event: LaunchEvent) -> LaunchOut:
@@ -774,6 +773,8 @@ def _model_out(m: PredictorModel) -> ModelOut:
         status=m.status,
         algorithm=m.algorithm,
         source=m.source,
+        feature_importances=dict(m.feature_importances or {}),
+        calibrated_z_trigger=m.calibrated_z_trigger,
     )
 
 

@@ -8,6 +8,7 @@ from sklearn.ensemble import GradientBoostingRegressor
 from sqlalchemy.orm import Session
 
 from launcher.features import DraftFeatures
+from launcher.metrics import precision_recall
 from launcher.models import PredictorModel
 from launcher.outcomes import OutcomeRow, OutcomeSource
 from launcher.params import ParamStore
@@ -130,19 +131,11 @@ def train_predictor(
     holdout.fit(X[:split], y_z[:split])
     held_pred = list(holdout.predict(X[split:]))
 
-    tp = fp = fn = 0
+    pred_flags = [p >= trigger for p in held_pred]
+    precision, recall = precision_recall(pred_flags, y_flag[split:])
     residuals: list[float] = []
-    for pred, actual_z, flag in zip(held_pred, y_z[split:], y_flag[split:], strict=True):
+    for pred, actual_z in zip(held_pred, y_z[split:], strict=True):
         residuals.append(pred - actual_z)
-        pred_flag = pred >= trigger
-        if pred_flag and flag:
-            tp += 1
-        elif pred_flag and not flag:
-            fp += 1
-        elif not pred_flag and flag:
-            fn += 1
-    precision = tp / (tp + fp) if (tp + fp) else 0.0
-    recall = tp / (tp + fn) if (tp + fn) else 0.0
 
     final = GradientBoostingRegressor(random_state=7)
     final.fit(X, y_z)
