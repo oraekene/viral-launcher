@@ -78,16 +78,17 @@ virality guarantee. Anti-gaming rules are vetoes, not advice.
 
 ## Radar-dependent status
 
-- **Predictor** trains today on `SyntheticOutcomeSource` (deterministic
-  dev corpus). Metrics on synthetic data say nothing about real-world
-  quality. The swap point is `RadarOutcomeSource`, which activates when the
-  radar build exposes alert events x outcomes in the canonical schema;
-  training with source=radar returns 501 until then.
+All launcher-side edges are code-complete; only real data remains external:
+
+- **Predictor** trains on staged radar outcomes (`POST /outcomes/import`,
+  then `source=radar`) or on the deterministic synthetic corpus for dev.
+  Metrics from synthetic data say nothing about real-world quality.
 - **Post-publish loop** uses manual t=10 snapshot entry until the radar
-  own-account variant exists; protocol evaluation is isolated so the radar
-  adapter can call it directly.
-- **Calibration closure (ticket 05)** runs z.trigger refits (F1-maximizing
-  sweep, flips `calibrated` at >=100 events), veto review flags, and
-  drift/age-triggered retrains — against synthetic outcome streams until
-  the radar action loop connects (`source=radar` returns 501).
-- **Under-the-Hood label check** waits on X's account-label surface.
+  own-account variant exists; protocol evaluation is isolated so the
+  radar adapter can call it directly.
+- **Calibration** runs against staged outcomes via `source=radar`;
+  `calibrated` status means "calibrated against that source" — re-run
+  when real outcomes replace staged dev data.
+- **Under-the-Hood labels** are manual entry today; X's fetcher plugs
+  into the same store when pilot access is granted. Fresh labels warn
+  on every draft before you invest in it.
