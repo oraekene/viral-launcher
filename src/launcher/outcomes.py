@@ -82,7 +82,9 @@ class SyntheticLauncherOutcomeSource:
                 scheduled_at=None,
                 allow_premium_length=False,
             )
-            vector = dict(zip(FEATURE_NAMES, feature_vector(features)))
+            vector = dict(
+                zip(FEATURE_NAMES, feature_vector(features, rng.random() * 0.6))
+            )
             z60 = max(0.0, base + quality * (0.5 if winner else 0.8) + noise)
             rows.append(
                 LauncherOutcomeRow(
@@ -150,7 +152,9 @@ class SyntheticOutcomeSource:
                 scheduled_at=None,
                 allow_premium_length=False,
             )
-            vector = dict(zip(FEATURE_NAMES, feature_vector(features)))
+            vector = dict(
+                zip(FEATURE_NAMES, feature_vector(features, rng.random() * 0.6))
+            )
             rows.append(
                 OutcomeRow(
                     features=vector,

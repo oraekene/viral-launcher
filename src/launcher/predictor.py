@@ -30,32 +30,49 @@ FEATURE_NAMES: tuple[str, ...] = (
     "log_followers",
     "mutuals",
     "premium_length",
+    "swatch_similarity",
 )
 
-ALGORITHM = "gradient_boosting_regressor.v1"
+ALGORITHM = "gradient_boosting_regressor.v2"
 MIN_EVENTS = 200
 
 
-def feature_vector(f: DraftFeatures) -> list[float]:
-    return [
-        float(f.char_len),
-        float(f.word_count),
-        float(f.question_count),
-        1.0 if f.has_question else 0.0,
-        1.0 if f.has_cta else 0.0,
-        1.0 if f.quotable_claim else 0.0,
-        float(f.link_count),
-        float(f.hashtag_count),
-        float(f.mention_count),
-        float(f.exclamation_count),
-        1.0 if f.thread_marker else 0.0,
-        float(len(f.engagement_bait_hits)),
-        float(len(f.mass_reply_markers)),
-        float(len(f.pod_signature_hits)),
-        math.log1p(f.author_followers) if f.author_followers is not None else 0.0,
-        float(f.mutuals_count) if f.mutuals_count is not None else 0.0,
-        1.0 if f.allow_premium_length else 0.0,
-    ]
+def feature_values(
+    features: DraftFeatures, swatch_similarity: float = 0.0
+) -> dict[str, float]:
+    return {
+        "char_len": float(features.char_len),
+        "word_count": float(features.word_count),
+        "question_count": float(features.question_count),
+        "has_question": 1.0 if features.has_question else 0.0,
+        "has_cta": 1.0 if features.has_cta else 0.0,
+        "quotable_claim": 1.0 if features.quotable_claim else 0.0,
+        "link_count": float(features.link_count),
+        "hashtag_count": float(features.hashtag_count),
+        "mention_count": float(features.mention_count),
+        "exclamation_count": float(features.exclamation_count),
+        "thread_marker": 1.0 if features.thread_marker else 0.0,
+        "bait_hits": float(len(features.engagement_bait_hits)),
+        "mass_markers": float(len(features.mass_reply_markers)),
+        "pod_hits": float(len(features.pod_signature_hits)),
+        "log_followers": (
+            math.log1p(features.author_followers)
+            if features.author_followers is not None
+            else 0.0
+        ),
+        "mutuals": (
+            float(features.mutuals_count) if features.mutuals_count is not None else 0.0
+        ),
+        "premium_length": 1.0 if features.allow_premium_length else 0.0,
+        "swatch_similarity": swatch_similarity,
+    }
+
+
+def feature_vector(
+    features: DraftFeatures, swatch_similarity: float = 0.0
+) -> list[float]:
+    values = feature_values(features, swatch_similarity)
+    return [values[name] for name in FEATURE_NAMES]
 
 
 @dataclass(frozen=True)
@@ -159,12 +176,17 @@ def train_predictor(
 
 
 def predict_z(
-    session: Session, project_id: str | None, features: DraftFeatures
+    session: Session,
+    project_id: str | None,
+    features: DraftFeatures,
+    swatch_similarity: float = 0.0,
 ) -> Prediction | None:
     artifact = load_artifact(session, project_id)
     if artifact is None:
         return None
-    x = [feature_vector(features)]
+    values = feature_values(features, swatch_similarity)
+    names = list(artifact.row.feature_names or FEATURE_NAMES)
+    x = [[values[name] for name in names]]
     z = max(0.0, float(artifact.fitted.predict(x)[0]))
     return Prediction(
         predicted_z=round(z, 4),

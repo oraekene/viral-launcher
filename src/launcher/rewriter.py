@@ -15,6 +15,7 @@ from launcher.models import Draft, DraftVariant
 from launcher.params import ParamStore
 from launcher.predictor import load_artifact, predict_z
 from launcher.scoring import interim_score
+from launcher.similarity import max_swatch_similarity
 
 
 @dataclass(frozen=True)
@@ -271,8 +272,11 @@ def rewrite_flow(
         score = 0.0
         reasons: list[str] = []
         if not vetoed:
+            sim = max_swatch_similarity(session, draft.project_id, text)
             prediction = (
-                predict_z(session, draft.project_id, features) if artifact else None
+                predict_z(session, draft.project_id, features, swatch_similarity=sim)
+                if artifact
+                else None
             )
             if prediction is not None:
                 score = round(prediction.predicted_z, 4)
@@ -280,6 +284,7 @@ def rewrite_flow(
                     f"predicted z {prediction.predicted_z:.2f} "
                     f"+-{prediction.band_width:.2f} (model {prediction.model_id}, "
                     f"{prediction.model_status})",
+                    f"format similarity to archived winners: {sim:.2f}",
                     "interim gate score "
                     f"{interim_score(features, store).score}",
                 ]

@@ -46,6 +46,7 @@ from launcher.outcomes import (
     SyntheticLauncherOutcomeSource,
     SyntheticOutcomeSource,
 )
+from launcher.similarity import max_swatch_similarity
 from launcher.swipes import archive_swatch, list_swatches
 
 
@@ -508,7 +509,12 @@ def create_app(
             mutuals_count=draft.mutuals_count,
             allow_premium_length=draft.allow_premium_length,
         )
-        prediction = predict_z(session, draft.project_id, features)
+        prediction = predict_z(
+            session,
+            draft.project_id,
+            features,
+            swatch_similarity=max_swatch_similarity(session, draft.project_id, draft.text),
+        )
         if prediction is None:
             return ScoreOut(scorer="interim", predicted_z=None)
         return ScoreOut(

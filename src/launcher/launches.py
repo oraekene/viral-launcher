@@ -9,6 +9,7 @@ from launcher.models import Draft, DraftVariant, LaunchEvent
 from launcher.params import ParamStore
 from launcher.predictor import predict_z
 from launcher.scoring import interim_score
+from launcher.similarity import max_swatch_similarity
 
 DOUBLE_DOWN_CHECKLIST: tuple[str, ...] = (
     "Self-reply with a new angle or the data behind the claim",
@@ -58,7 +59,8 @@ def register_launch(
         allow_premium_length=draft.allow_premium_length,
     )
     store = ParamStore(session)
-    prediction = predict_z(session, draft.project_id, features)
+    similarity = max_swatch_similarity(session, draft.project_id, text)
+    prediction = predict_z(session, draft.project_id, features, swatch_similarity=similarity)
     if prediction is not None:
         predicted_z = prediction.predicted_z
         band_width = prediction.band_width
