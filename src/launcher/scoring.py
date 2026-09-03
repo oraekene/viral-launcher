@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 from sqlalchemy.orm import Session
 
@@ -20,7 +21,11 @@ class ScoreResult:
 class ScoredScore:
     score: float
     reasons: list[str]
-    kind: str
+    kind: Literal["predicted", "interim"]
+    scorer: Literal["predictor", "interim"]
+    band_width: float
+    model_id: int | None
+    model_status: str | None
 
 
 def interim_score(features: DraftFeatures, store: ParamStore) -> ScoreResult:
@@ -60,11 +65,17 @@ def resolve_score(
     features: DraftFeatures,
     text: str,
 ) -> ScoredScore:
+    """Single Score seam: predictor when a model exists, else interim.
+
+    Owns the full fallback policy — score, kind, scorer identity, band
+    width, and model identity travel together so callers never re-derive
+    them. Gate-then-score ordering belongs to the caller.
+    """
     store = ParamStore(session)
     sim = max_swatch_similarity(session, project_id, text)
     prediction = predict_z(session, project_id, features, swatch_similarity=sim)
+    interim = interim_score(features, store)
     if prediction is not None:
-        interim = interim_score(features, store)
         return ScoredScore(
             score=round(prediction.predicted_z, 4),
             reasons=[
@@ -75,6 +86,17 @@ def resolve_score(
                 f"interim gate score {interim.score}",
             ],
             kind="predicted",
+            scorer="predictor",
+            band_width=prediction.band_width,
+            model_id=prediction.model_id,
+            model_status=prediction.model_status,
         )
-    result = interim_score(features, store)
-    return ScoredScore(score=result.score, reasons=list(result.reasons), kind="interim")
+    return ScoredScore(
+        score=interim.score,
+        reasons=list(interim.reasons),
+        kind="interim",
+        scorer="interim",
+        band_width=store.get_float("band.interim_width"),
+        model_id=None,
+        model_status=None,
+    )

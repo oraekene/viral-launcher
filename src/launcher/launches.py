@@ -7,8 +7,7 @@ from sqlalchemy.orm import Session
 from launcher.drafts import resolve_candidate_text
 from launcher.features import extract
 from launcher.models import LaunchEvent
-from launcher.params import ParamStore
-from launcher.scoring import interim_score, resolve_score
+from launcher.scoring import resolve_score
 
 DOUBLE_DOWN_CHECKLIST: tuple[str, ...] = (
     "Self-reply with a new angle or the data behind the claim",
@@ -59,37 +58,19 @@ def register_launch(
         scheduled_at=draft.scheduled_at,
         allow_premium_length=draft.allow_premium_length,
     )
-    store = ParamStore(session)
     scored = resolve_score(session, draft.project_id, features, text)
-    if scored.kind == "predicted":
-        predicted_z = scored.score
-        band_width = _band_from_model(session, draft.project_id)
-        scorer = "predictor"
-    else:
-        predicted_z = interim_score(features, store).score
-        band_width = store.get_float("band.interim_width")
-        scorer = "interim"
 
     event = LaunchEvent(
         draft_id=draft_id,
         variant_id=variant_id,
         post_external_id=post_external_id,
-        predicted_z=predicted_z,
-        band_width=band_width,
-        scorer=scorer,
+        predicted_z=scored.score,
+        band_width=scored.band_width,
+        scorer=scored.scorer,
     )
     session.add(event)
     session.flush()
     return event
-
-
-def _band_from_model(session: Session, project_id: str | None) -> float:
-    from launcher.predictor import load_artifact
-
-    artifact = load_artifact(session, project_id)
-    if artifact is None:
-        return ParamStore(session).get_float("band.interim_width")
-    return artifact.row.band_width
 
 
 def evaluate_protocol(predicted_z: float, band_width: float, actual_z: float) -> ProtocolCard:

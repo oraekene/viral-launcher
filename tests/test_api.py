@@ -255,6 +255,39 @@ def test_score_agrees_with_gate_on_scheduling(client: TestClient) -> None:
     assert bait_body["gate_verdict"] == "vetoed"
 
 
+def test_score_endpoint_delegates_to_shared_seam(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client.post("/models/train", json={"project_id": "proj", "n": 300})
+    created = client.post(
+        "/drafts",
+        json={"text": "Distribution beats marketing. What would you add?", "project_id": "proj"},
+    ).json()
+    before = client.post(f"/drafts/{created['id']}/score").json()
+    assert before["scorer"] == "predictor"
+
+    import launcher.scoring as scoring
+
+    monkeypatch.setattr(scoring, "predict_z", lambda *args, **kwargs: None)
+    after = client.post(f"/drafts/{created['id']}/score").json()
+    assert after["scorer"] == "interim"
+    assert after["predicted_z"] is None
+
+
+def test_launch_and_score_agree_on_predictor_values(client: TestClient) -> None:
+    client.post("/models/train", json={"project_id": "proj", "n": 300})
+    created = client.post(
+        "/drafts",
+        json={"text": "Distribution beats marketing. What would you add?", "project_id": "proj"},
+    ).json()
+    score = client.post(f"/drafts/{created['id']}/score").json()
+    launch = client.post("/launches", json={"draft_id": created["id"]}).json()
+    assert score["scorer"] == "predictor"
+    assert launch["scorer"] == "predictor"
+    assert launch["predicted_z"] == score["predicted_z"]
+    assert launch["band_width"] == score["band_width"]
+
+
 def test_scheduling_beyond_48h_warns(client: TestClient) -> None:
     from datetime import datetime, timedelta, timezone
 

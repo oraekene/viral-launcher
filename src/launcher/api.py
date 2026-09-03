@@ -34,7 +34,7 @@ from launcher.models import (
     Swatch,
 )
 from launcher.params import ParamStore
-from launcher.predictor import active_model, predict_z, train_predictor
+from launcher.predictor import active_model, train_predictor
 from launcher.rewriter import (
     RewriteResult,
     VariantProvider,
@@ -50,7 +50,7 @@ from launcher.outcomes import (
     SyntheticOutcomeSource,
     stage_radar_outcomes,
 )
-from launcher.similarity import max_swatch_similarity
+from launcher.scoring import resolve_score
 from launcher.swipes import archive_swatch, list_swatches
 
 
@@ -547,24 +547,20 @@ def create_app(
             allow_premium_length=draft.allow_premium_length,
         )
         report = load_engine(session).evaluate(features)
-        prediction = predict_z(
-            session,
-            draft.project_id,
-            features,
-            swatch_similarity=max_swatch_similarity(session, draft.project_id, draft.text),
-        )
-        if prediction is None:
+        scored = resolve_score(session, draft.project_id, features, draft.text)
+        if scored.kind == "interim":
             return ScoreOut(
                 scorer="interim",
                 predicted_z=None,
+                band_width=scored.band_width,
                 gate_verdict=report.verdict,
             )
         return ScoreOut(
             scorer="predictor",
-            predicted_z=prediction.predicted_z,
-            band_width=prediction.band_width,
-            model_id=prediction.model_id,
-            model_status=prediction.model_status,
+            predicted_z=scored.score,
+            band_width=scored.band_width,
+            model_id=scored.model_id,
+            model_status=scored.model_status,
             gate_verdict=report.verdict,
         )
 
