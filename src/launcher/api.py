@@ -13,7 +13,7 @@ from launcher import __version__
 from launcher.config import Settings
 from launcher.cost import BudgetExceeded
 from launcher.features import extract
-from launcher.gate import GateReport, load_engine
+from launcher.gate import load_engine
 from launcher.calibration import CalibrationReport, run_calibration
 from launcher.launches import (
     apply_snapshot,
@@ -291,10 +291,6 @@ class CalibrationStatusOut(BaseModel):
     project_id: str
     params: list[CalibrationStatusParam]
     active_model: ModelOut | None
-
-
-def _report_lines(report: GateReport) -> list[GateLineOut]:
-    return [GateLineOut(**line.as_dict()) for line in report.lines]
 
 
 def _draft_out(draft: Draft, label_warnings: list[str] | None = None) -> DraftOut:
@@ -749,10 +745,6 @@ def _swatch_out(s: Swatch) -> SwatchOut:
     )
 
 
-def _checklist_for(protocol_fired: str | None) -> list[str]:
-    return checklist_for(protocol_fired)
-
-
 def _launch_out(event: LaunchEvent) -> LaunchOut:
     return LaunchOut(
         id=event.id,
@@ -764,7 +756,7 @@ def _launch_out(event: LaunchEvent) -> LaunchOut:
         scorer=event.scorer,
         actual_z_t10=event.actual_z_t10,
         protocol_fired=event.protocol_fired,
-        checklist=_checklist_for(event.protocol_fired),
+        checklist=checklist_for(event.protocol_fired),
         interventions=list(event.interventions or []),
     )
 
