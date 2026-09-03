@@ -18,6 +18,7 @@ from launcher.predictor import MIN_EVENTS, active_model, train_predictor
 
 MIN_EVIDENCE = 100
 MAX_MODEL_AGE = timedelta(days=30)
+DRIFT_THRESHOLD = 0.20
 
 
 @dataclass(frozen=True)
@@ -58,7 +59,6 @@ def _model_age(model: PredictorModel) -> timedelta:
 
 
 def should_retrain(
-    session: Session,
     model: PredictorModel,
     rows: list[LauncherOutcomeRow],
 ) -> bool:
@@ -71,9 +71,6 @@ def should_retrain(
     if reference <= 0.0:
         return recent > 0.0
     return abs(recent - reference) / reference > DRIFT_THRESHOLD
-
-
-DRIFT_THRESHOLD = 0.20
 
 
 def _best_f1_threshold(rows: list[LauncherOutcomeRow]) -> tuple[float, float]:
@@ -133,7 +130,7 @@ def run_calibration(
     source_is_real = isinstance(source, StagedLauncherOutcomeSource)
     applied = False
 
-    if model is not None and should_retrain(session, model, rows):
+    if model is not None and should_retrain(model, rows):
         train_predictor(session, project_id, _LauncherAsTrainingSource(rows))
         retrained = True
         reason += "; predictor retrained (drift or age threshold hit)"

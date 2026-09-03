@@ -87,14 +87,14 @@ def test_retrain_on_drift(seeded: Session) -> None:
     drifted_share = min(ref * 2.0, 0.95)
     assert ref > 0.05
     drifted = SyntheticLauncherOutcomeSource(n=300, winner_share=drifted_share)
-    assert should_retrain(seeded, model, drifted.load_outcomes("proj")) is True
+    assert should_retrain(model, drifted.load_outcomes("proj")) is True
 
 
 def test_no_retrain_when_stable(seeded: Session) -> None:
     model = train_predictor(seeded, "proj", SyntheticOutcomeSource(n=300))
     ref = model.training_winner_share
     stable = SyntheticLauncherOutcomeSource(n=300, winner_share=max(ref * 0.99, 0.02))
-    assert should_retrain(seeded, model, stable.load_outcomes("proj")) is False
+    assert should_retrain(model, stable.load_outcomes("proj")) is False
 
 
 def test_calibration_report_counts(seeded: Session) -> None:
