@@ -70,11 +70,28 @@ def test_flow_ranks_survivors_and_excludes_vetoed(seeded: Session) -> None:
     assert scores == sorted(scores, reverse=True)
 
 
-def test_flow_includes_original_as_candidate(seeded: Session) -> None:
+def test_flow_scores_only_generated_variants(seeded: Session) -> None:
+    provider = FakeProvider(
+        [
+            "Fear was the constraint. What would you add?",
+            "Second variant with a real question?",
+        ]
+    )
+    draft = seeded.query(Draft).one()
+    result = rewrite_flow(seeded, draft.id, provider, n=2)
+    assert result.generated == 2
+    rows = seeded.query(DraftVariant).all()
+    assert len(rows) == 2
+    assert all(row.text != draft.text for row in rows)
+
+
+def test_flow_never_ranks_original_as_candidate(seeded: Session) -> None:
     provider = FakeProvider([])
     draft = seeded.query(Draft).one()
     result = rewrite_flow(seeded, draft.id, provider, n=1)
-    assert any(v.text == draft.text for v in result.top)
+    assert result.generated == 0
+    assert result.top == ()
+    assert seeded.query(DraftVariant).count() == 0
 
 
 def test_flow_persists_variants_with_gate_lines(seeded: Session) -> None:
@@ -82,7 +99,7 @@ def test_flow_persists_variants_with_gate_lines(seeded: Session) -> None:
     draft = seeded.query(Draft).one()
     rewrite_flow(seeded, draft.id, provider, n=1)
     rows = seeded.query(DraftVariant).order_by(DraftVariant.variant_index).all()
-    assert len(rows) == 2
+    assert len(rows) == 1
     for row in rows:
         assert row.gate_lines
         assert all("source_note" in line for line in row.gate_lines)

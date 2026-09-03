@@ -162,8 +162,7 @@ def test_variants_persisted_and_queryable(client: TestClient) -> None:
     client.post(f"/drafts/{created['id']}/rewrite", json={"n": 4})
     variants = client.get(f"/drafts/{created['id']}/variants").json()
     assert len(variants) >= 2
-    original_rows = [v for v in variants if v["text"] == CLEAN_DRAFT]
-    assert len(original_rows) == 1
+    assert all(v["text"] != CLEAN_DRAFT for v in variants)
     for row in variants:
         assert isinstance(row["vetoed"], bool)
         assert row["gate_lines"]

@@ -252,7 +252,7 @@ def rewrite_flow(
     per_variant_cost = gen.usd / max(len(gen.texts), 1)
 
     engine = load_engine(session)
-    candidates = [draft.text, *gen.texts]
+    candidates = list(gen.texts)
     survivors: list[tuple[DraftVariant, float]] = []
     vetoed_count = 0
 
@@ -313,7 +313,7 @@ def rewrite_flow(
     return RewriteResult(
         draft_id=draft_id,
         top=top,
-        generated=len(candidates),
+        generated=len(gen.texts),
         vetoed_count=vetoed_count,
         cost_usd=gen.usd,
     )
