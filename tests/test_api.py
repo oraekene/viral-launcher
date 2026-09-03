@@ -232,6 +232,29 @@ def test_batch_continues_past_budget_block() -> None:
         assert rewrite["top"] == []
 
 
+def test_score_agrees_with_gate_on_scheduling(client: TestClient) -> None:
+    from datetime import datetime, timedelta, timezone
+
+    future = datetime.now(timezone.utc) + timedelta(hours=72)
+    created = client.post(
+        "/drafts",
+        json={"text": CLEAN_DRAFT, "scheduled_at": future.isoformat()},
+    ).json()
+    lines = {l["rule_id"]: l for l in created["gate_report"]}
+    assert lines["timing.engagement_window"]["verdict"] == "warn"
+
+    body = client.post(f"/drafts/{created['id']}/score").json()
+    assert body["gate_verdict"] == "passed_with_warnings"
+
+    clean = client.post("/drafts", json={"text": CLEAN_DRAFT}).json()
+    clean_body = client.post(f"/drafts/{clean['id']}/score").json()
+    assert clean_body["gate_verdict"] == "passed"
+
+    bait = client.post("/drafts", json={"text": "Like if you agree!"}).json()
+    bait_body = client.post(f"/drafts/{bait['id']}/score").json()
+    assert bait_body["gate_verdict"] == "vetoed"
+
+
 def test_scheduling_beyond_48h_warns(client: TestClient) -> None:
     from datetime import datetime, timedelta, timezone
 

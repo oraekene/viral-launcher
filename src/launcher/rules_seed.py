@@ -114,7 +114,10 @@ def _rule_timing(f: DraftFeatures, store: ParamStore) -> tuple[LineVerdict, str]
     hl = int(store.get_float("half_life.minutes"))
     age_h = store.get_float("age_filter.hours")
     if f.scheduled_at is not None:
-        delta_h = (f.scheduled_at - datetime.now(timezone.utc)).total_seconds() / 3600
+        scheduled = f.scheduled_at
+        if scheduled.tzinfo is None:
+            scheduled = scheduled.replace(tzinfo=timezone.utc)
+        delta_h = (scheduled - datetime.now(timezone.utc)).total_seconds() / 3600
         if delta_h > age_h:
             return "warn", (
                 f"scheduled {delta_h:.0f}h out; posts older than {int(age_h)}h stop "

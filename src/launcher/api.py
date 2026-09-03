@@ -181,6 +181,7 @@ class ScoreOut(BaseModel):
     band_width: float | None = None
     model_id: int | None = None
     model_status: str | None = None
+    gate_verdict: str
 
 
 class LaunchIn(BaseModel):
@@ -546,8 +547,10 @@ def create_app(
             draft.text,
             author_followers=draft.author_followers,
             mutuals_count=draft.mutuals_count,
+            scheduled_at=draft.scheduled_at,
             allow_premium_length=draft.allow_premium_length,
         )
+        report = load_engine(session).evaluate(features)
         prediction = predict_z(
             session,
             draft.project_id,
@@ -555,13 +558,18 @@ def create_app(
             swatch_similarity=max_swatch_similarity(session, draft.project_id, draft.text),
         )
         if prediction is None:
-            return ScoreOut(scorer="interim", predicted_z=None)
+            return ScoreOut(
+                scorer="interim",
+                predicted_z=None,
+                gate_verdict=report.verdict,
+            )
         return ScoreOut(
             scorer="predictor",
             predicted_z=prediction.predicted_z,
             band_width=prediction.band_width,
             model_id=prediction.model_id,
             model_status=prediction.model_status,
+            gate_verdict=report.verdict,
         )
 
     @app.post("/launches", status_code=201, response_model=LaunchOut)

@@ -56,6 +56,7 @@ def register_launch(
         text,
         author_followers=draft.author_followers,
         mutuals_count=draft.mutuals_count,
+        scheduled_at=draft.scheduled_at,
         allow_premium_length=draft.allow_premium_length,
     )
     store = ParamStore(session)
