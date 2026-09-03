@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from launcher import __version__
 from launcher.config import Settings
 from launcher.cost import BudgetExceeded
+from launcher.drafts import score_draft as score_draft_service
 from launcher.features import extract
 from launcher.gate import load_engine
 from launcher.calibration import CalibrationReport, run_calibration
@@ -50,7 +51,6 @@ from launcher.outcomes import (
     SyntheticOutcomeSource,
     stage_radar_outcomes,
 )
-from launcher.scoring import resolve_score
 from launcher.swipes import archive_swatch, list_swatches
 
 
@@ -536,18 +536,11 @@ def create_app(
 
     @app.post("/drafts/{draft_id}/score", response_model=ScoreOut)
     def score_draft(draft_id: int, session: Session = Depends(get_session)) -> ScoreOut:
-        draft = session.get(Draft, draft_id)
-        if draft is None:
-            raise HTTPException(status_code=404, detail="draft not found")
-        features = extract(
-            draft.text,
-            author_followers=draft.author_followers,
-            mutuals_count=draft.mutuals_count,
-            scheduled_at=draft.scheduled_at,
-            allow_premium_length=draft.allow_premium_length,
-        )
-        report = load_engine(session).evaluate(features)
-        scored = resolve_score(session, draft.project_id, features, draft.text)
+        try:
+            result = score_draft_service(session, draft_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        report, scored = result.report, result.scored
         if scored.kind == "interim":
             return ScoreOut(
                 scorer="interim",
