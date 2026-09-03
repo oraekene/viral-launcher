@@ -49,25 +49,50 @@ def test_mass_reply_template_is_hard_veto(engine: GateEngine) -> None:
     f = extract("Hey {name}, dm me your biggest struggle right now.")
     report = engine.evaluate(f)
     assert report.verdict == "vetoed"
-    assert report.lines[-1].rule_id == "negative.mass_reply_template"
-    assert all(l.verdict != "veto" for l in report.lines[:-1])
+    vetoes = [l for l in report.lines if l.verdict == "veto"]
+    assert any(l.rule_id == "negative.mass_reply_template" for l in vetoes)
+    assert all(
+        l.verdict != "veto"
+        for l in report.lines
+        if l.rule_id == "negative.engagement_bait"
+    )
 
 
 def test_pod_signature_is_hard_veto(engine: GateEngine) -> None:
     f = extract("Engagement pod roll call. Reply chain below.")
     report = engine.evaluate(f)
     assert report.verdict == "vetoed"
-    assert report.lines[-1].rule_id == "negative.pod_signature"
-    assert all(l.verdict != "veto" for l in report.lines[:-1])
+    vetoes = [l for l in report.lines if l.verdict == "veto"]
+    assert any(l.rule_id == "negative.pod_signature" for l in vetoes)
 
 
-def test_first_veto_stops_evaluation(engine: GateEngine) -> None:
+def test_first_veto_preserves_verdict_while_evaluating_all_rules(
+    engine: GateEngine,
+) -> None:
     long_bait = ("Like if you agree! " + "x" * 300)
     f = extract(long_bait)
     report = engine.evaluate(f)
     assert report.verdict == "vetoed"
-    assert len(report.lines) == 1
+    assert len(report.lines) > 1
     assert report.lines[0].rule_id == "negative.engagement_bait"
+    assert report.lines[0].verdict == "veto"
+
+
+def test_vetoed_report_still_contains_advisory_lines(engine: GateEngine) -> None:
+    long_bait = ("Like if you agree! " + "x" * 300)
+    f = extract(long_bait)
+    report = engine.evaluate(f)
+    assert report.verdict == "vetoed"
+    rule_ids = [line.rule_id for line in report.lines]
+    assert rule_ids[0] == "negative.engagement_bait"
+    for expected in (
+        "elicitation.question",
+        "elicitation.quotable",
+        "network.mutual_plan",
+        "author.new_boost",
+        "timing.engagement_window",
+    ):
+        assert expected in rule_ids
 
 
 def test_missing_elicitation_warns(engine: GateEngine) -> None:

@@ -64,8 +64,8 @@ class GateEngine:
                 )
             )
             if line_verdict == "veto":
-                return GateReport(verdict="vetoed", lines=tuple(lines))
-            if line_verdict == "warn" and verdict != "vetoed":
+                verdict = "vetoed"
+            elif line_verdict == "warn" and verdict == "passed":
                 verdict = "passed_with_warnings"
         return GateReport(verdict=verdict, lines=tuple(lines))
 
