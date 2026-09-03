@@ -71,6 +71,7 @@ def test_synthetic_run_never_writes_calibrated(seeded: Session) -> None:
     model = seeded.query(PredictorModel).order_by(PredictorModel.id.desc()).first()
     assert model is not None
     assert model.status == "pending"
+    assert model.calibrated_z_trigger is None
 
 
 def test_veto_contradictions_flagged_not_silently_kept(seeded: Session) -> None:
