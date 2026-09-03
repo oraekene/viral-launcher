@@ -28,12 +28,13 @@ def test_seed_is_idempotent(seeded: Session) -> None:
     assert seeded.query(ParamVersion).count() == len(PARAM_SEED)
 
 
-def test_published_weights_are_sourced(seeded: Session) -> None:
+def test_published_weights_are_assumed_until_vendored(seeded: Session) -> None:
     store = ParamStore(seeded)
     pv = store.get("weight.reply")
     assert pv.value == 5.0
-    assert pv.status == "sourced"
+    assert pv.status == "assumed"
     assert "x-algorithm" in pv.source_note
+    assert "not vendored" in pv.source_note
 
 
 def test_negative_weights_present(seeded: Session) -> None:

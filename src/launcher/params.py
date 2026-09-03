@@ -7,7 +7,10 @@ from sqlalchemy.orm import Session
 
 from launcher.models import ParamVersion
 
-_XALGO = "xai-org/x-algorithm home-mixer/params/param.rs (released Aug 13 2026)"
+_XALGO = (
+    "xai-org/x-algorithm home-mixer/params/param.rs (released Aug 13 2026) — "
+    "assumed: primary source not vendored in-repo, verify before citing"
+)
 
 
 class ParamSpec(NamedTuple):
@@ -18,22 +21,22 @@ class ParamSpec(NamedTuple):
 
 
 PARAM_SEED: tuple[ParamSpec, ...] = (
-    ParamSpec("weight.reply", 5.0, "sourced", _XALGO),
-    ParamSpec("weight.quote", 5.0, "sourced", _XALGO),
-    ParamSpec("weight.share", 2.0, "sourced", _XALGO),
-    ParamSpec("weight.repost", 1.0, "sourced", _XALGO),
-    ParamSpec("weight.like", 0.5, "sourced", _XALGO),
-    ParamSpec("weight.click", 0.4, "sourced", _XALGO),
-    ParamSpec("negative.report", -234.0, "sourced", _XALGO),
-    ParamSpec("negative.mute", -58.8, "sourced", _XALGO),
-    ParamSpec("negative.not_interested", -43.2, "sourced", _XALGO),
-    ParamSpec("negative.block", -31.2, "sourced", _XALGO),
-    ParamSpec("boost.bidirectional_reply", 15.0, "sourced", _XALGO),
-    ParamSpec("oon.discount", 0.75, "sourced", _XALGO),
-    ParamSpec("author.diversity_decay", 0.5, "sourced", _XALGO),
-    ParamSpec("author.diversity_floor", 0.25, "sourced", _XALGO),
-    ParamSpec("cold_start.follower_cap", 1000.0, "sourced", _XALGO),
-    ParamSpec("age_filter.hours", 48.0, "sourced", _XALGO),
+    ParamSpec("weight.reply", 5.0, "assumed", _XALGO),
+    ParamSpec("weight.quote", 5.0, "assumed", _XALGO),
+    ParamSpec("weight.share", 2.0, "assumed", _XALGO),
+    ParamSpec("weight.repost", 1.0, "assumed", _XALGO),
+    ParamSpec("weight.like", 0.5, "assumed", _XALGO),
+    ParamSpec("weight.click", 0.4, "assumed", _XALGO),
+    ParamSpec("negative.report", -234.0, "assumed", _XALGO),
+    ParamSpec("negative.mute", -58.8, "assumed", _XALGO),
+    ParamSpec("negative.not_interested", -43.2, "assumed", _XALGO),
+    ParamSpec("negative.block", -31.2, "assumed", _XALGO),
+    ParamSpec("boost.bidirectional_reply", 15.0, "assumed", _XALGO),
+    ParamSpec("oon.discount", 0.75, "assumed", _XALGO),
+    ParamSpec("author.diversity_decay", 0.5, "assumed", _XALGO),
+    ParamSpec("author.diversity_floor", 0.25, "assumed", _XALGO),
+    ParamSpec("cold_start.follower_cap", 1000.0, "assumed", _XALGO),
+    ParamSpec("age_filter.hours", 48.0, "assumed", _XALGO),
     ParamSpec(
         "half_life.minutes",
         80.0,

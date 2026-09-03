@@ -175,13 +175,13 @@ RULE_SEED: tuple[RuleSpec, ...] = (
         "elicitation.question",
         _rule_question,
         "weight.reply",
-        "Replies weigh 5.0 in x-algorithm production params (Aug 13 2026)",
+        "Replies weigh 5.0 (assumed x-algorithm production weight, Aug 13 2026)",
     ),
     RuleSpec(
         "elicitation.quotable",
         _rule_quotable,
         "weight.quote",
-        "Quotes weigh 5.0 in x-algorithm production params (Aug 13 2026)",
+        "Quotes weigh 5.0 (assumed x-algorithm production weight, Aug 13 2026)",
     ),
     RuleSpec(
         "hashtags.spam",
@@ -193,7 +193,7 @@ RULE_SEED: tuple[RuleSpec, ...] = (
         "links.value",
         _rule_links,
         "weight.click",
-        "External links risk low dwell; clicks weigh 0.4 in production params",
+        "External links risk low dwell; clicks weigh 0.4 (assumed production weight)",
     ),
     RuleSpec(
         "network.mutual_plan",

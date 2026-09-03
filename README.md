@@ -23,9 +23,10 @@ Implements tickets 01–02 of `.scratch/viral-launcher/` (spec:
 - **Cost metering** — per-draft budget cap (default $0.10) enforced on
   *projected* spend before any paid call; all spend lands in one ledger.
 
-Constants live in `param_versions` with `sourced` / `pending` / `calibrated`
-statuses. The Aug-13-2026 x-algorithm production weights are seeded as
-`sourced`; calibration-dependent values (`z.trigger`, cost caps) start
+Constants live in `param_versions` with `sourced` / `assumed` / `pending` /
+`calibrated` statuses. The Aug-13-2026 x-algorithm production weights are
+seeded as `assumed` (primary source not vendored in-repo — verify before
+citing); calibration-dependent values (`z.trigger`, cost caps) start
 `pending`.
 
 ## Install

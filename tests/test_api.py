@@ -90,7 +90,7 @@ def test_rules_listing_and_toggle(client: TestClient) -> None:
 def test_params_endpoint_exposes_provenance(client: TestClient) -> None:
     params = {p["key"]: p for p in client.get("/params").json()}
     assert params["weight.reply"]["value"] == 5.0
-    assert params["weight.reply"]["status"] == "sourced"
+    assert params["weight.reply"]["status"] == "assumed"
     assert params["z.trigger"]["status"] == "pending"
 
 
