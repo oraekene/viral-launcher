@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
-from typing import Any, NamedTuple, Protocol
+from typing import TYPE_CHECKING, Any, NamedTuple, Protocol
 
 from sqlalchemy.orm import Session
 
 from launcher.features import DraftFeatures
+
+if TYPE_CHECKING:
+    from launcher.models import RadarOutcomeStage
 
 
 def _draw_draft(rng: random.Random, bait: bool) -> tuple[DraftFeatures, float]:
@@ -140,7 +143,7 @@ class _StageLoader:
     def __init__(self, session: Session) -> None:
         self._session = session
 
-    def load(self, project_id: str) -> list[Any]:
+    def load(self, project_id: str) -> list[RadarOutcomeStage]:
         from launcher.models import RadarOutcomeStage
 
         rows = (
