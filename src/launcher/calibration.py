@@ -10,7 +10,6 @@ from launcher.models import PredictorModel, utcnow
 from launcher.outcomes import (
     OutcomeRow,
     OutcomeSource,
-    StagedOutcomeSource,
 )
 from launcher.predictor import MIN_EVENTS, active_model, train_predictor
 
@@ -132,7 +131,7 @@ def run_calibration(
     reason = "z.trigger refit computed on launcher outcomes"
     model = active_model(session, project_id)
 
-    source_is_real = isinstance(source, StagedOutcomeSource)
+    source_is_real = source.is_trusted
     applied = False
 
     if model is not None and should_retrain(model, rows):

@@ -10,6 +10,7 @@ from launcher.calibration import (
 )
 from launcher.models import Base, ParamVersion, PredictorModel
 from launcher.outcomes import StagedOutcomeSource, SyntheticOutcomeSource, stage_radar_outcomes
+from launcher.outcomes import OutcomeRow
 from launcher.params import seed_params
 from launcher.predictor import train_predictor
 from launcher.rules_seed import seed_rules
@@ -98,6 +99,29 @@ def test_calibration_report_counts(seeded: Session) -> None:
     report = run_calibration(seeded, "proj", SyntheticOutcomeSource(n=250))
     assert report.n_outcomes == 250
     assert 0.0 <= report.winner_share <= 1.0
+
+
+def test_writeback_follows_source_trust_not_type(seeded: Session) -> None:
+    class TrustedMemorySource:
+        def __init__(self, rows: list[OutcomeRow]) -> None:
+            self._rows = rows
+
+        @property
+        def provenance(self) -> str:
+            return "test-trusted"
+
+        @property
+        def is_trusted(self) -> bool:
+            return True
+
+        def load_outcomes(self, project_id: str) -> list[OutcomeRow]:
+            return list(self._rows)
+
+    train_predictor(seeded, "proj", SyntheticOutcomeSource(n=300))
+    rows = SyntheticOutcomeSource(n=250, winner_share=0.4).load_outcomes("proj")
+    report = run_calibration(seeded, "proj", TrustedMemorySource(rows))
+    assert report.calibrated is True
+    assert report.applied is True
 
 
 def test_retrain_happens_during_run_when_drifted(seeded: Session) -> None:
