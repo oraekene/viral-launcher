@@ -3,7 +3,11 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
+
+from sqlalchemy.orm import Session
 
 from launcher.config import Settings
 from launcher.db import bootstrap
@@ -14,9 +18,15 @@ from launcher.params import ParamStore
 from launcher.rewriter import default_provider, rewrite_flow
 
 
-def _gate_payload(settings: Settings, args: argparse.Namespace) -> dict[str, object]:
+@contextmanager
+def session_scope(settings: Settings) -> Iterator[Session]:
     factory = bootstrap(settings.database_url)
     with factory() as session:
+        yield session
+
+
+def _gate_payload(settings: Settings, args: argparse.Namespace) -> dict[str, object]:
+    with session_scope(settings) as session:
         engine = load_engine(session)
         features = extract(
             args.text,
@@ -32,8 +42,7 @@ def _gate_payload(settings: Settings, args: argparse.Namespace) -> dict[str, obj
 
 
 def _rewrite_payload(settings: Settings, args: argparse.Namespace) -> dict[str, object]:
-    factory = bootstrap(settings.database_url)
-    with factory() as session:
+    with session_scope(settings) as session:
         draft = Draft(
             text=args.text,
             author_followers=args.followers,
@@ -65,9 +74,8 @@ def _batch_payload(settings: Settings, args: argparse.Namespace) -> dict[str, ob
     items: list[dict[str, object]] = json.loads(
         Path(args.path).read_text(encoding="utf-8")
     )
-    factory = bootstrap(settings.database_url)
     results: list[dict[str, object]] = []
-    with factory() as session:
+    with session_scope(settings) as session:
         provider = default_provider(settings, ParamStore(session))
         for item in items:
             text = str(item.get("text", "")).strip()
