@@ -2,10 +2,12 @@
 
 System 3: The Launcher — the radar, inverted. Pre-publish gate, interim scoring,
 and a rewriter loop for short social posts, with every decision traceable to a
-published algorithm fact or a calibration parameter.
+published algorithm fact, an explicitly-marked assumption, or a calibration
+parameter.
 
-Implements tickets 01–02 of `.scratch/viral-launcher/` (spec:
-`.scratch/viral-launcher/spec.md`).
+Implements tickets 01–06 of `.scratch/viral-launcher/` (spec:
+`.scratch/viral-launcher/spec.md`), plus edges A (format similarity),
+B (radar outcome staging), and C (account labels).
 
 ## What it does
 
@@ -17,9 +19,19 @@ Implements tickets 01–02 of `.scratch/viral-launcher/` (spec:
   Every report line names its source.
 - **Rewriter** — generates N variants (heuristic provider offline, any
   OpenAI-compatible chat endpoint when `LAUNCHER_LLM_API_KEY` is set), vetoes
-  non-compliant variants, ranks survivors by an interim weighted score, and
-  returns the top-3 with reason breakdowns. The predictor (ticket 03) will
-  replace the interim scorer once radar outcome data exists.
+  non-compliant variants, ranks survivors through the Score seam (predictor
+  when a trained model exists, interim weighted score otherwise), and
+  returns the top-3 with reason breakdowns.
+- **Predictor** — gradient-boosted z model per project, trained on staged
+  radar outcomes or the deterministic synthetic corpus; reports precision,
+  recall, feature importances, and calibration status.
+- **Post-publish loop** — launch registry with t=10 snapshots, double-down /
+  escalate / hold protocol cards with checklists, and intervention logging.
+- **Calibration** — refits `z.trigger` against staged outcomes, flags
+  veto contradictions, and retrains the predictor on drift; synthetic runs
+  rehearse without persisting.
+- **Swipe file** — archive launched posts as format swatches; similarity to
+  archived winners feeds the score.
 - **Cost metering** — per-draft budget cap (default $0.10) enforced on
   *projected* spend before any paid call; all spend lands in one ledger.
 
@@ -53,8 +65,15 @@ HTTP API (see `/docs` when serving):
 ```
 POST /drafts                    paste a draft -> gate report
 POST /drafts/{id}/rewrite       N variants -> top-3 ranked + reasons
+POST /drafts/{id}/score         gate verdict + Score-seam score
 GET  /drafts/{id}/variants      persisted variants incl. vetoed ones
 GET  /drafts/{id}/costs         per-draft spend ledger
+POST /drafts/batch              plan many drafts, optional rewrite
+POST /models/train | GET /models
+POST /launches + t=10 snapshots, interventions
+POST /calibration/run | GET /calibration/status
+POST /outcomes/import           stage radar outcomes
+POST /swatches | GET /swatches  archive + list format winners
 GET  /costs                     global summary
 GET  /rules | POST /rules/{id}/toggle
 GET  /params                    constants with provenance
