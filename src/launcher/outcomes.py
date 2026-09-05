@@ -64,6 +64,32 @@ class OutcomeSource(Protocol):
     def load_outcomes(self, project_id: str) -> list[OutcomeRow]: ...
 
 
+def _synthesize_row(
+    rng: random.Random, features: DraftFeatures, quality: float, winner: bool
+) -> OutcomeRow:
+    """One synthetic outcome row: separated z60 band by flag, veto labels kept."""
+    from launcher.predictor import FEATURE_NAMES, feature_vector
+
+    followers = features.author_followers or 0
+    author_boost = 0.3 if followers <= 1000 else 0.0
+    base = 3.5 if winner else 1.3
+    z60 = max(0.0, base + 0.3 * quality + author_boost + rng.gauss(0.0, 0.2))
+
+    fired: tuple[str, ...] = ()
+    if winner and rng.random() < 0.05:
+        fired = ("negative.engagement_bait",)
+    elif (not winner) and rng.random() < 0.08:
+        fired = ("negative.engagement_bait",)
+
+    vector = dict(zip(FEATURE_NAMES, feature_vector(features, rng.random() * 0.6)))
+    return OutcomeRow(
+        features=vector,
+        z60=round(z60, 3),
+        value_flag=winner,
+        fired_vetoes=fired,
+    )
+
+
 class SyntheticOutcomeSource:
     def __init__(self, n: int = 400, winner_share: float = 0.25, seed: int = 7) -> None:
         if not 0.0 <= winner_share <= 1.0:
@@ -81,8 +107,6 @@ class SyntheticOutcomeSource:
         return False
 
     def load_outcomes(self, project_id: str) -> list[OutcomeRow]:
-        from launcher.predictor import FEATURE_NAMES, feature_vector
-
         rng = random.Random(f"synthetic:{project_id}:{self._seed}")
         # Rank-based winners: the top-k drafts by quality become winners, so
         # flags stay controllable via winner_share AND learnable from features
@@ -94,32 +118,10 @@ class SyntheticOutcomeSource:
             reverse=True,
         )
         winners = set(ranked[: round(self._n * self._winner_share)])
-        rows: list[OutcomeRow] = []
-        for i, (features, quality) in enumerate(drafts):
-            winner = i in winners
-            followers = features.author_followers or 0
-            author_boost = 0.3 if followers <= 1000 else 0.0
-            base = 3.5 if winner else 1.3
-            z60 = max(0.0, base + 0.3 * quality + author_boost + rng.gauss(0.0, 0.2))
-
-            fired: tuple[str, ...] = ()
-            if winner and rng.random() < 0.05:
-                fired = ("negative.engagement_bait",)
-            elif (not winner) and rng.random() < 0.08:
-                fired = ("negative.engagement_bait",)
-
-            vector = dict(
-                zip(FEATURE_NAMES, feature_vector(features, rng.random() * 0.6))
-            )
-            rows.append(
-                OutcomeRow(
-                    features=vector,
-                    z60=round(z60, 3),
-                    value_flag=winner,
-                    fired_vetoes=fired,
-                )
-            )
-        return rows
+        return [
+            _synthesize_row(rng, features, quality, i in winners)
+            for i, (features, quality) in enumerate(drafts)
+        ]
 
 
 class _StageLoader:

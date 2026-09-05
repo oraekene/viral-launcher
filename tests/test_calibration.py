@@ -9,8 +9,7 @@ from launcher.calibration import (
     should_retrain,
 )
 from launcher.models import Base, ParamVersion, PredictorModel
-from launcher.outcomes import StagedOutcomeSource, SyntheticOutcomeSource, stage_radar_outcomes
-from launcher.outcomes import OutcomeRow
+from launcher.outcomes import OutcomeRow, StagedOutcomeSource, SyntheticOutcomeSource, stage_radar_outcomes
 from launcher.params import seed_params
 from launcher.predictor import train_predictor
 from launcher.rules_seed import seed_rules
