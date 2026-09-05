@@ -10,13 +10,7 @@ from sqlalchemy.orm import Session
 
 from launcher.calibration import CalibrationReport, run_calibration
 from launcher.models import ParamVersion, PredictorModel
-from launcher.outcomes import (
-    LauncherOutcomeSource,
-    RadarOutcomeSource,
-    StagedLauncherOutcomeSource,
-    SyntheticLauncherOutcomeSource,
-    SyntheticOutcomeSource,
-)
+from launcher.outcomes import outcome_source
 from launcher.predictor import active_model, train_predictor
 
 
@@ -121,19 +115,11 @@ def build_models_router(
     def train_model(
         data: TrainIn, session: Session = Depends(get_session)
     ) -> ModelOut:
-        if data.source == "radar":
-            try:
-                row = train_predictor(
-                    session, data.project_id, RadarOutcomeSource(session)
-                )
-            except ValueError as exc:
-                raise HTTPException(status_code=422, detail=str(exc)) from exc
-            return _model_out(row)
         try:
             row = train_predictor(
                 session,
                 data.project_id,
-                SyntheticOutcomeSource(n=data.n or 400),
+                outcome_source(data.source, session, n=data.n or 400),
             )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -153,14 +139,17 @@ def build_models_router(
         data: CalibrationIn, session: Session = Depends(get_session)
     ) -> CalibrationReportOut:
         try:
-            source: LauncherOutcomeSource
-            if data.source == "radar":
-                source = StagedLauncherOutcomeSource(session)
-            else:
-                source = SyntheticLauncherOutcomeSource(
-                    n=data.n or 300, winner_share=data.winner_share or 0.25
-                )
-            report = run_calibration(session, data.project_id, source)
+            report = run_calibration(
+                session,
+                data.project_id,
+                outcome_source(
+                    data.source,
+                    session,
+                    n=data.n or 300,
+                    winner_share=data.winner_share or 0.25,
+                    launcher=True,
+                ),
+            )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         return _calibration_report_out(report)

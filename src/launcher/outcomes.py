@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, NamedTuple, Protocol
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Protocol, overload
 
 from sqlalchemy.orm import Session
 
@@ -185,6 +185,53 @@ class StagedLauncherOutcomeSource:
             )
             for r in self._loader.load(project_id)
         ]
+
+
+@overload
+def outcome_source(
+    source: str,
+    session: Session,
+    *,
+    n: int,
+    winner_share: float = ...,
+    launcher: Literal[False] = ...,
+) -> OutcomeSource: ...
+
+
+@overload
+def outcome_source(
+    source: str,
+    session: Session,
+    *,
+    n: int,
+    winner_share: float = ...,
+    launcher: Literal[True],
+) -> LauncherOutcomeSource: ...
+
+
+def outcome_source(
+    source: str,
+    session: Session,
+    *,
+    n: int,
+    winner_share: float = 0.25,
+    launcher: bool = False,
+) -> OutcomeSource | LauncherOutcomeSource:
+    """Single factory for outcome sources: picks staged/real or synthetic.
+
+    `launcher=True` selects the launcher row family (with fired vetoes) for
+    calibration; otherwise the plain training family. Raises ValueError for
+    unknown names so routes map it to 422 like empty evidence.
+    """
+    if source == "radar":
+        if launcher:
+            return StagedLauncherOutcomeSource(session)
+        return RadarOutcomeSource(session)
+    if source == "synthetic":
+        if launcher:
+            return SyntheticLauncherOutcomeSource(n=n, winner_share=winner_share)
+        return SyntheticOutcomeSource(n=n)
+    raise ValueError(f"unknown outcome source {source!r}")
 
 
 def stage_radar_outcomes(
