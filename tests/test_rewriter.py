@@ -175,6 +175,12 @@ def test_chat_merges_top_up_on_short_first_page(
     assert len(calls) == 2
 
 
+def test_parse_texts_strips_one_dash_marker() -> None:
+    assert OpenAICompatProvider._parse_texts(
+        "- hello\n-- nested\n-hello\nnot a bullet"
+    ) == ("hello", "- nested", "hello")
+
+
 def test_chat_raises_on_non_200(
     seeded: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:

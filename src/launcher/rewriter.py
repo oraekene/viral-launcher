@@ -193,7 +193,7 @@ class OpenAICompatProvider:
     @staticmethod
     def _parse_texts(content: str) -> tuple[str, ...]:
         return tuple(
-            line.lstrip("- ").strip()
+            line.removeprefix("-").strip()
             for line in content.splitlines()
             if line.strip().startswith("-")
         )
