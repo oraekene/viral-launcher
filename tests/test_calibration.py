@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+from datetime import timedelta
+
 import pytest
 from sqlalchemy.orm import Session
 
 from launcher.calibration import (
+    CalibrationConfig,
     CalibrationReport,
+    decide_calibration,
     run_calibration,
-    should_retrain,
 )
 from launcher.models import Base, ParamVersion, PredictorModel
 from launcher.outcomes import OutcomeRow, StagedOutcomeSource, SyntheticOutcomeSource, stage_radar_outcomes
@@ -78,20 +81,31 @@ def test_veto_contradictions_flagged_not_silently_kept(seeded: Session) -> None:
         assert flag.rule_name.startswith("negative.")
 
 
-def test_retrain_on_drift(seeded: Session) -> None:
-    model = train_predictor(seeded, "proj", SyntheticOutcomeSource(n=300))
-    ref = model.training_winner_share
-    drifted_share = min(ref * 2.0, 0.95)
-    assert ref > 0.05
-    drifted = SyntheticOutcomeSource(n=300, winner_share=drifted_share)
-    assert should_retrain(model, drifted.load_outcomes("proj")) is True
+def _policy_rows(n: int, winners: int) -> list[OutcomeRow]:
+    return [
+        OutcomeRow(features={}, z60=3.0 if i < winners else 1.0, value_flag=i < winners)
+        for i in range(n)
+    ]
 
 
-def test_no_retrain_when_stable(seeded: Session) -> None:
-    model = train_predictor(seeded, "proj", SyntheticOutcomeSource(n=300))
-    ref = model.training_winner_share
-    stable = SyntheticOutcomeSource(n=300, winner_share=max(ref * 0.99, 0.02))
-    assert should_retrain(model, stable.load_outcomes("proj")) is False
+def test_policy_retrains_on_drift() -> None:
+    decision = decide_calibration(
+        _policy_rows(300, 150),
+        model_age=timedelta(days=1),
+        training_share=0.25,
+        trusted=False,
+    )
+    assert decision.retrain is True
+
+
+def test_policy_holds_when_stable() -> None:
+    decision = decide_calibration(
+        _policy_rows(300, 75),
+        model_age=timedelta(days=1),
+        training_share=0.25,
+        trusted=False,
+    )
+    assert decision.retrain is False
 
 
 def test_calibration_report_counts(seeded: Session) -> None:
@@ -121,6 +135,58 @@ def test_writeback_follows_source_trust_not_type(seeded: Session) -> None:
     report = run_calibration(seeded, "proj", TrustedMemorySource(rows))
     assert report.calibrated is True
     assert report.applied is True
+
+
+def test_policy_decision_needs_no_database() -> None:
+    config = CalibrationConfig()
+    rows = _policy_rows(300, 75)
+    settled = decide_calibration(
+        rows,
+        model_age=timedelta(days=1),
+        training_share=0.25,
+        trusted=False,
+        config=config,
+    )
+    assert settled.calibrated is True
+    assert settled.retrain is False
+    assert settled.writeback is False
+    assert settled.n_outcomes == 300
+
+    thin = decide_calibration(
+        _policy_rows(10, 3),
+        model_age=timedelta(days=1),
+        training_share=0.25,
+        trusted=False,
+        config=config,
+    )
+    assert thin.calibrated is False
+
+    trusted = decide_calibration(
+        rows,
+        model_age=timedelta(days=1),
+        training_share=0.25,
+        trusted=True,
+        config=config,
+    )
+    assert trusted.writeback is True
+
+    drifted = decide_calibration(
+        _policy_rows(300, 225),
+        model_age=timedelta(days=1),
+        training_share=0.25,
+        trusted=False,
+        config=config,
+    )
+    assert drifted.retrain is True
+
+    stale = decide_calibration(
+        rows,
+        model_age=timedelta(days=60),
+        training_share=0.25,
+        trusted=False,
+        config=config,
+    )
+    assert stale.retrain is True
 
 
 def test_retrain_happens_during_run_when_drifted(seeded: Session) -> None:
