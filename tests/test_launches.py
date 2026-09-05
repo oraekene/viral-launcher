@@ -113,3 +113,25 @@ def test_missing_launch_404(client: TestClient) -> None:
         client.post("/launches/9999/snapshot", json={"actual_z_t10": 1.0}).status_code
         == 404
     )
+
+
+def test_protocol_cards_use_checklist_table() -> None:
+    from launcher.launches import checklist_for, evaluate_protocol
+
+    assert list(evaluate_protocol(1.0, 0.5, 0.0).checklist) == checklist_for(
+        "double_down"
+    )
+    assert list(evaluate_protocol(1.0, 0.5, 3.0).checklist) == checklist_for(
+        "escalate"
+    )
+    assert list(evaluate_protocol(1.0, 0.5, 1.0).checklist) == checklist_for("hold")
+    assert checklist_for(None) == []
+    assert checklist_for("unknown") == []
+
+
+def test_checklist_lookup_returns_copies() -> None:
+    from launcher.launches import checklist_for
+
+    first = checklist_for("hold")
+    first.append("mutated")
+    assert "mutated" not in checklist_for("hold")

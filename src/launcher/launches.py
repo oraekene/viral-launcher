@@ -34,7 +34,7 @@ _CHECKLISTS: dict[str, list[str]] = {
 
 
 def checklist_for(protocol: str | None) -> list[str]:
-    return _CHECKLISTS.get(protocol or "", [])
+    return list(_CHECKLISTS.get(protocol or "", []))
 
 
 @dataclass(frozen=True)
