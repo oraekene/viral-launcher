@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from collections.abc import Sequence
 from typing import Protocol
 
 import httpx
@@ -227,6 +228,23 @@ class RewriteResult:
     cost_usd: float
 
 
+def rank_candidates(
+    texts: Sequence[str],
+    scores: Sequence[float],
+    vetoed: Sequence[bool],
+    *,
+    limit: int = 3,
+) -> list[int]:
+    """Pure ranking policy: indices of the top non-vetoed candidates by
+    score, highest first; stable on ties."""
+    order = sorted(
+        (i for i in range(len(texts)) if not vetoed[i]),
+        key=lambda i: scores[i],
+        reverse=True,
+    )
+    return order[:limit]
+
+
 def rewrite_flow(
     session: Session,
     draft_id: int,
@@ -253,7 +271,9 @@ def rewrite_flow(
 
     engine = load_engine(session)
     candidates = list(gen.texts)
-    survivors: list[tuple[DraftVariant, float]] = []
+    rows: list[DraftVariant] = []
+    scores: list[float] = []
+    vetoes: list[bool] = []
     vetoed_count = 0
 
     for idx, text in enumerate(candidates):
@@ -287,8 +307,9 @@ def rewrite_flow(
         )
         session.add(row)
         session.flush()
-        if not vetoed:
-            survivors.append((row, score))
+        rows.append(row)
+        scores.append(score)
+        vetoes.append(vetoed)
 
     meter.record(
         draft_id,
@@ -299,16 +320,15 @@ def rewrite_flow(
         note=f"{len(gen.texts)} variants generated",
     )
 
-    survivors.sort(key=lambda pair: pair[1], reverse=True)
     top = tuple(
         RankedVariant(
-            id=row.id,
-            text=row.text,
-            score=row.score,
-            reasons=tuple(row.reasons),
-            gate_lines=tuple(row.gate_lines or ()),
+            id=rows[i].id,
+            text=rows[i].text,
+            score=rows[i].score,
+            reasons=tuple(rows[i].reasons),
+            gate_lines=tuple(rows[i].gate_lines or ()),
         )
-        for row, _ in survivors[:3]
+        for i in rank_candidates(candidates, scores, vetoes)
     )
     return RewriteResult(
         draft_id=draft_id,

@@ -10,6 +10,7 @@ from launcher.rewriter import (
     GenerationResult,
     HeuristicProvider,
     RewriteResult,
+    rank_candidates,
     rewrite_flow,
     try_rewrite_flow,
 )
@@ -125,6 +126,21 @@ def test_per_draft_cap_blocks_repeat_paid_rewrite(seeded: Session) -> None:
 def test_missing_draft_raises(seeded: Session) -> None:
     with pytest.raises(ValueError):
         rewrite_flow(seeded, 9999, FakeProvider([]), n=1)
+
+
+def test_rank_candidates_orders_scores_and_excludes_vetoed() -> None:
+    idx = rank_candidates(
+        ["a", "b", "c", "d"],
+        [1.0, 3.0, 2.0, 5.0],
+        [False, False, True, False],
+    )
+    assert idx == [3, 1, 0]
+
+
+def test_rank_candidates_stable_on_ties_and_empty() -> None:
+    assert rank_candidates(["a", "b", "c"], [2.0, 2.0, 1.0], [False] * 3) == [0, 1, 2]
+    assert rank_candidates([], [], []) == []
+    assert rank_candidates(["a"], [1.0], [True]) == []
 
 
 def test_try_rewrite_returns_result_on_success(seeded: Session) -> None:
