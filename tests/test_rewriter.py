@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import httpx
 import pytest
 from sqlalchemy.orm import Session
 
+from launcher.config import Settings
 from launcher.cost import BudgetExceeded, CostMeter
 from launcher.models import Draft, DraftVariant
-from launcher.params import seed_params
+from launcher.params import ParamStore, seed_params
 from launcher.rewriter import (
     GenerationResult,
     HeuristicProvider,
@@ -142,9 +144,6 @@ class _StubResponse:
 
 
 def _llm_provider(seeded: Session) -> OpenAICompatProvider:
-    from launcher.config import Settings
-    from launcher.params import ParamStore
-
     return OpenAICompatProvider(
         Settings(
             database_url="sqlite://",
@@ -159,11 +158,15 @@ def _llm_provider(seeded: Session) -> OpenAICompatProvider:
 def test_chat_merges_top_up_on_short_first_page(
     seeded: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import httpx
+    calls: list[dict[str, object]] = []
 
-    calls: list[object] = []
-
-    def fake_post(url: str, headers: object = None, json: object = None, timeout: float = 0) -> _StubResponse:
+    def fake_post(
+        url: str,
+        headers: dict[str, str] | None = None,
+        json: dict[str, object] | None = None,
+        timeout: float = 0,
+    ) -> _StubResponse:
+        assert json is not None
         calls.append(json)
         if len(calls) == 1:
             return _StubResponse(200, "- first variant")
@@ -173,6 +176,8 @@ def test_chat_merges_top_up_on_short_first_page(
     result = _llm_provider(seeded).generate("Some draft here.", n=2)
     assert result.texts == ("first variant", "second variant")
     assert len(calls) == 2
+    assert calls[0]["temperature"] == 0.8
+    assert calls[1]["temperature"] == 1.0
 
 
 def test_parse_texts_strips_one_dash_marker() -> None:
@@ -184,9 +189,12 @@ def test_parse_texts_strips_one_dash_marker() -> None:
 def test_chat_raises_on_non_200(
     seeded: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import httpx
-
-    def fake_post(url: str, headers: object = None, json: object = None, timeout: float = 0) -> _StubResponse:
+    def fake_post(
+        url: str,
+        headers: dict[str, str] | None = None,
+        json: dict[str, object] | None = None,
+        timeout: float = 0,
+    ) -> _StubResponse:
         return _StubResponse(500, "boom")
 
     monkeypatch.setattr(httpx, "post", fake_post)
@@ -196,7 +204,6 @@ def test_chat_raises_on_non_200(
 
 def test_rank_candidates_orders_scores_and_excludes_vetoed() -> None:
     idx = rank_candidates(
-        ["a", "b", "c", "d"],
         [1.0, 3.0, 2.0, 5.0],
         [False, False, True, False],
     )
@@ -204,9 +211,14 @@ def test_rank_candidates_orders_scores_and_excludes_vetoed() -> None:
 
 
 def test_rank_candidates_stable_on_ties_and_empty() -> None:
-    assert rank_candidates(["a", "b", "c"], [2.0, 2.0, 1.0], [False] * 3) == [0, 1, 2]
-    assert rank_candidates([], [], []) == []
-    assert rank_candidates(["a"], [1.0], [True]) == []
+    assert rank_candidates([2.0, 2.0, 1.0], [False] * 3) == [0, 1, 2]
+    assert rank_candidates([], []) == []
+    assert rank_candidates([1.0], [True]) == []
+
+
+def test_rank_candidates_rejects_mismatched_lengths() -> None:
+    with pytest.raises(ValueError):
+        rank_candidates([1.0, 2.0], [False])
 
 
 def test_try_rewrite_returns_result_on_success(seeded: Session) -> None:

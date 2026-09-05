@@ -228,7 +228,6 @@ class RewriteResult:
 
 
 def rank_candidates(
-    texts: Sequence[str],
     scores: Sequence[float],
     vetoed: Sequence[bool],
     *,
@@ -236,8 +235,12 @@ def rank_candidates(
 ) -> list[int]:
     """Pure ranking policy: indices of the top non-vetoed candidates by
     score, highest first; stable on ties."""
+    if len(scores) != len(vetoed):
+        raise ValueError(
+            f"scores ({len(scores)}) and vetoed ({len(vetoed)}) disagree in length"
+        )
     order = sorted(
-        (i for i in range(len(texts)) if not vetoed[i]),
+        (i for i in range(len(scores)) if not vetoed[i]),
         key=lambda i: scores[i],
         reverse=True,
     )
@@ -327,7 +330,7 @@ def rewrite_flow(
             reasons=tuple(rows[i].reasons),
             gate_lines=tuple(rows[i].gate_lines or ()),
         )
-        for i in rank_candidates(candidates, scores, vetoes)
+        for i in rank_candidates(scores, vetoes)
     )
     return RewriteResult(
         draft_id=draft_id,
