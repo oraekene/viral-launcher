@@ -20,13 +20,14 @@ def seeded(session: Session) -> Session:
     return session
 
 
-def test_synthetic_source_generates_labelled_rows(seeded: Session) -> None:
-    rows = SyntheticOutcomeSource(n=200).load_outcomes("proj")
-    assert len(rows) == 200
+def test_synthetic_source_honors_winner_share(seeded: Session) -> None:
+    rows = SyntheticOutcomeSource(n=400, winner_share=0.5).load_outcomes("proj")
+    assert len(rows) == 400
+    share = sum(r.value_flag for r in rows) / len(rows)
+    assert 0.35 < share < 0.65
     for row in rows[:5]:
         assert isinstance(row.features, dict)
         assert row.z60 >= 0.0
-        assert row.value_flag == (row.z60 >= 2.5)
 
 
 def test_train_persists_model_with_metrics(seeded: Session) -> None:

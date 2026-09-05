@@ -9,8 +9,7 @@ from sqlalchemy.pool import StaticPool
 from launcher.api import create_app
 from launcher.models import Base
 from launcher.outcomes import (
-    RadarOutcomeSource,
-    StagedLauncherOutcomeSource,
+    StagedOutcomeSource,
     SyntheticOutcomeSource,
 )
 from launcher.seed import seed_all
@@ -69,7 +68,7 @@ def test_train_with_radar_source_after_import(client: TestClient) -> None:
         json={"project_id": "radar-proj", "source": "radar", "n": 400},
     )
     assert resp.status_code == 201
-    assert resp.json()["source"] == "RadarOutcomeSource"
+    assert resp.json()["source"] == "StagedOutcomeSource"
 
 
 def test_train_radar_source_empty_stage_is_422(client: TestClient) -> None:
@@ -108,15 +107,15 @@ def test_radar_source_direct(session: Session) -> None:
     session.commit()
     assert count == 60
 
-    loaded = RadarOutcomeSource(session).load_outcomes("direct-proj")
+    loaded = StagedOutcomeSource(session).load_outcomes("direct-proj")
     assert len(loaded) == 60
     assert all(isinstance(r.features, dict) for r in loaded)
 
     with pytest.raises(ValueError, match="no radar outcomes"):
-        RadarOutcomeSource(session).load_outcomes("empty-proj")
+        StagedOutcomeSource(session).load_outcomes("empty-proj")
 
 
-def test_staged_launcher_source_preserves_vetoes(session: Session) -> None:
+def test_staged_source_preserves_vetoes(session: Session) -> None:
     from launcher.outcomes import stage_radar_outcomes
 
     rows = SyntheticOutcomeSource(n=30).load_outcomes("launch-proj")
@@ -135,6 +134,6 @@ def test_staged_launcher_source_preserves_vetoes(session: Session) -> None:
     )
     session.commit()
 
-    launcher_rows = StagedLauncherOutcomeSource(session).load_outcomes("launch-proj")
+    launcher_rows = StagedOutcomeSource(session).load_outcomes("launch-proj")
     assert len(launcher_rows) == 30
     assert launcher_rows[0].fired_vetoes == ("negative.pod_signature",)

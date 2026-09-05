@@ -9,10 +9,8 @@ from launcher.metrics import precision_recall
 from launcher.models import PredictorModel, utcnow
 from launcher.outcomes import (
     OutcomeRow,
-    LauncherOutcomeSource,
-    OutcomeRow,
-    StagedLauncherOutcomeSource,
-    SyntheticLauncherOutcomeSource,
+    OutcomeSource,
+    StagedOutcomeSource,
 )
 from launcher.predictor import MIN_EVENTS, active_model, train_predictor
 
@@ -40,15 +38,22 @@ class CalibrationReport:
     reason: str = ""
 
 
-class _LauncherAsTrainingSource:
+class _StaticSource:
+    """In-memory rows as a source, for retraining on calibration evidence."""
+
     def __init__(self, rows: list[OutcomeRow]) -> None:
         self._rows = rows
 
+    @property
+    def provenance(self) -> str:
+        return "memory"
+
+    @property
+    def is_trusted(self) -> bool:
+        return False
+
     def load_outcomes(self, project_id: str) -> list[OutcomeRow]:
-        return [
-            OutcomeRow(features=r.features, z60=r.z60, value_flag=r.value_flag)
-            for r in self._rows
-        ]
+        return list(self._rows)
 
 
 def _model_age(model: PredictorModel) -> timedelta:
@@ -95,7 +100,7 @@ def _best_f1_threshold(rows: list[OutcomeRow]) -> tuple[float, float]:
 def run_calibration(
     session: Session,
     project_id: str,
-    source: LauncherOutcomeSource,
+    source: OutcomeSource,
 ) -> CalibrationReport:
     rows = source.load_outcomes(project_id)
 
@@ -127,11 +132,11 @@ def run_calibration(
     reason = "z.trigger refit computed on launcher outcomes"
     model = active_model(session, project_id)
 
-    source_is_real = isinstance(source, StagedLauncherOutcomeSource)
+    source_is_real = isinstance(source, StagedOutcomeSource)
     applied = False
 
     if model is not None and should_retrain(model, rows):
-        train_predictor(session, project_id, _LauncherAsTrainingSource(rows))
+        train_predictor(session, project_id, _StaticSource(rows))
         retrained = True
         reason += "; predictor retrained (drift or age threshold hit)"
         model = active_model(session, project_id)

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Protocol, overload
+from typing import TYPE_CHECKING, Any, Protocol
 
 from sqlalchemy.orm import Session
 
@@ -55,60 +55,52 @@ class OutcomeRow:
 
 
 class OutcomeSource(Protocol):
-    def load_outcomes(self, project_id: str) -> list[OutcomeRow]: ...
+    @property
+    def provenance(self) -> str: ...
 
+    @property
+    def is_trusted(self) -> bool: ...
 
-class LauncherOutcomeSource(Protocol):
     def load_outcomes(self, project_id: str) -> list[OutcomeRow]: ...
 
 
 class SyntheticOutcomeSource:
-    def __init__(self, n: int = 400, seed: int = 7) -> None:
-        self._n = n
-        self._seed = seed
-
-    def load_outcomes(self, project_id: str) -> list[OutcomeRow]:
-        from launcher.predictor import FEATURE_NAMES, feature_vector
-
-        rng = random.Random(f"{project_id}:{self._seed}")
-        rows: list[OutcomeRow] = []
-        for _ in range(self._n):
-            features, quality = _draw_draft(rng, bait=rng.random() < 0.08)
-            followers = features.author_followers or 0
-            mutuals = features.mutuals_count or 0
-            author_boost = 0.6 if followers <= 1000 else 0.0
-            noise = rng.gauss(0.0, 0.8)
-            z60 = max(0.0, 1.5 + quality + author_boost + 0.02 * mutuals + noise)
-
-            vector = dict(
-                zip(FEATURE_NAMES, feature_vector(features, rng.random() * 0.6))
-            )
-            rows.append(
-                OutcomeRow(
-                    features=vector,
-                    z60=round(z60, 3),
-                    value_flag=z60 >= 2.5,
-                )
-            )
-        return rows
-
-
-class SyntheticLauncherOutcomeSource:
-    def __init__(
-        self, n: int = 300, winner_share: float = 0.25, seed: int = 11
-    ) -> None:
+    def __init__(self, n: int = 400, winner_share: float = 0.25, seed: int = 7) -> None:
+        if not 0.0 <= winner_share <= 1.0:
+            raise ValueError(f"winner_share must be within [0, 1], got {winner_share}")
         self._n = n
         self._winner_share = winner_share
         self._seed = seed
 
+    @property
+    def provenance(self) -> str:
+        return "synthetic"
+
+    @property
+    def is_trusted(self) -> bool:
+        return False
+
     def load_outcomes(self, project_id: str) -> list[OutcomeRow]:
         from launcher.predictor import FEATURE_NAMES, feature_vector
 
-        rng = random.Random(f"launcher:{project_id}:{self._seed}")
+        rng = random.Random(f"synthetic:{project_id}:{self._seed}")
+        # Rank-based winners: the top-k drafts by quality become winners, so
+        # flags stay controllable via winner_share AND learnable from features
+        # (a pure draw would be feature-invisible and untrainable).
+        drafts = [_draw_draft(rng, bait=rng.random() < 0.08) for _ in range(self._n)]
+        ranked = sorted(
+            range(self._n),
+            key=lambda i: drafts[i][1] + rng.gauss(0.0, 0.4),
+            reverse=True,
+        )
+        winners = set(ranked[: round(self._n * self._winner_share)])
         rows: list[OutcomeRow] = []
-        for _ in range(self._n):
-            winner = rng.random() < self._winner_share
-            features, quality = _draw_draft(rng, bait=False)
+        for i, (features, quality) in enumerate(drafts):
+            winner = i in winners
+            followers = features.author_followers or 0
+            author_boost = 0.3 if followers <= 1000 else 0.0
+            base = 3.5 if winner else 1.3
+            z60 = max(0.0, base + 0.3 * quality + author_boost + rng.gauss(0.0, 0.2))
 
             fired: tuple[str, ...] = ()
             if winner and rng.random() < 0.05:
@@ -119,8 +111,6 @@ class SyntheticLauncherOutcomeSource:
             vector = dict(
                 zip(FEATURE_NAMES, feature_vector(features, rng.random() * 0.6))
             )
-            base = 2.6 if winner else 1.3
-            z60 = max(0.0, base + quality * (0.5 if winner else 0.8) + rng.gauss(0.0, 0.7))
             rows.append(
                 OutcomeRow(
                     features=vector,
@@ -153,20 +143,17 @@ class _StageLoader:
         return rows
 
 
-class RadarOutcomeSource:
+class StagedOutcomeSource:
     def __init__(self, session: Session) -> None:
         self._loader = _StageLoader(session)
 
-    def load_outcomes(self, project_id: str) -> list[OutcomeRow]:
-        return [
-            OutcomeRow(features=dict(r.features), z60=r.z60, value_flag=r.value_flag)
-            for r in self._loader.load(project_id)
-        ]
+    @property
+    def provenance(self) -> str:
+        return "radar-staged"
 
-
-class StagedLauncherOutcomeSource:
-    def __init__(self, session: Session) -> None:
-        self._loader = _StageLoader(session)
+    @property
+    def is_trusted(self) -> bool:
+        return True
 
     def load_outcomes(self, project_id: str) -> list[OutcomeRow]:
         return [
@@ -180,50 +167,24 @@ class StagedLauncherOutcomeSource:
         ]
 
 
-@overload
-def outcome_source(
-    source: str,
-    session: Session,
-    *,
-    n: int,
-    winner_share: float = ...,
-    launcher: Literal[False] = ...,
-) -> OutcomeSource: ...
-
-
-@overload
-def outcome_source(
-    source: str,
-    session: Session,
-    *,
-    n: int,
-    winner_share: float = ...,
-    launcher: Literal[True],
-) -> LauncherOutcomeSource: ...
-
-
 def outcome_source(
     source: str,
     session: Session,
     *,
     n: int,
     winner_share: float = 0.25,
-    launcher: bool = False,
-) -> OutcomeSource | LauncherOutcomeSource:
-    """Single factory for outcome sources: picks staged/real or synthetic.
+) -> OutcomeSource:
+    """Single factory for outcome sources: staged/real or synthetic.
 
-    `launcher=True` selects the launcher row family (with fired vetoes) for
-    calibration; otherwise the plain training family. Raises ValueError for
-    unknown names so routes map it to 422 like empty evidence.
+    Both sources serve training and calibration through the one
+    OutcomeSource contract; trust (synthetic rehearsal never writes,
+    staged evidence may) travels on the source, not on its type.
+    Raises ValueError for unknown names so routes map it to 422.
     """
     if source == "radar":
-        if launcher:
-            return StagedLauncherOutcomeSource(session)
-        return RadarOutcomeSource(session)
+        return StagedOutcomeSource(session)
     if source == "synthetic":
-        if launcher:
-            return SyntheticLauncherOutcomeSource(n=n, winner_share=winner_share)
-        return SyntheticOutcomeSource(n=n)
+        return SyntheticOutcomeSource(n=n, winner_share=winner_share)
     raise ValueError(f"unknown outcome source {source!r}")
 
 

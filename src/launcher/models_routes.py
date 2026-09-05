@@ -147,7 +147,6 @@ def build_models_router(
                     session,
                     n=data.n or 300,
                     winner_share=data.winner_share or 0.25,
-                    launcher=True,
                 ),
             )
         except ValueError as exc:
