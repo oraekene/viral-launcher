@@ -113,6 +113,28 @@ class OpenAICompatProvider:
         self._settings = settings
         self._store = store
 
+    def _chat(
+        self, messages: list[dict[str, str]], temperature: float
+    ) -> httpx.Response:
+        """Single chat-completions POST; transport errors become ProviderError."""
+        try:
+            return httpx.post(
+                f"{self._settings.llm_base_url}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {self._settings.llm_api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": self._settings.llm_model,
+                    "messages": messages,
+                    "n": 1,
+                    "temperature": temperature,
+                },
+                timeout=30.0,
+            )
+        except httpx.HTTPError as exc:
+            raise ProviderError(f"llm request failed: {exc}") from exc
+
     def generate(self, draft_text: str, n: int) -> GenerationResult:
         system = (
             "You rewrite short social posts. Given a draft, produce exactly "
@@ -121,26 +143,13 @@ class OpenAICompatProvider:
             "or quotes honestly. Never add engagement bait like 'like if' or "
             "'tag someone'."
         )
-        try:
-            resp = httpx.post(
-                f"{self._settings.llm_base_url}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {self._settings.llm_api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": self._settings.llm_model,
-                    "messages": [
-                        {"role": "system", "content": system},
-                        {"role": "user", "content": draft_text},
-                    ],
-                    "n": 1,
-                    "temperature": 0.8,
-                },
-                timeout=30.0,
-            )
-        except httpx.HTTPError as exc:
-            raise ProviderError(f"llm request failed: {exc}") from exc
+        resp = self._chat(
+            [
+                {"role": "system", "content": system},
+                {"role": "user", "content": draft_text},
+            ],
+            0.8,
+        )
         if resp.status_code != 200:
             raise ProviderError(f"llm returned status {resp.status_code}: {resp.text}")
         payload = resp.json()
@@ -150,28 +159,18 @@ class OpenAICompatProvider:
         tokens_out = int(usage.get("completion_tokens", 0))
         texts = self._parse_texts(content)
         if len(texts) < n:
-            top_up = httpx.post(
-                f"{self._settings.llm_base_url}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {self._settings.llm_api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": self._settings.llm_model,
-                    "messages": [
-                        {"role": "system", "content": system},
-                        {
-                            "role": "user",
-                            "content": (
-                                f"{draft_text}\n\nProduce {n - len(texts)} more "
-                                "variants, same format."
-                            ),
-                        },
-                    ],
-                    "n": 1,
-                    "temperature": 1.0,
-                },
-                timeout=30.0,
+            top_up = self._chat(
+                [
+                    {"role": "system", "content": system},
+                    {
+                        "role": "user",
+                        "content": (
+                            f"{draft_text}\n\nProduce {n - len(texts)} more "
+                            "variants, same format."
+                        ),
+                    },
+                ],
+                1.0,
             )
             if top_up.status_code == 200:
                 top_payload = top_up.json()

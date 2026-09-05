@@ -9,6 +9,8 @@ from launcher.params import seed_params
 from launcher.rewriter import (
     GenerationResult,
     HeuristicProvider,
+    OpenAICompatProvider,
+    ProviderError,
     RewriteResult,
     rank_candidates,
     rewrite_flow,
@@ -126,6 +128,64 @@ def test_per_draft_cap_blocks_repeat_paid_rewrite(seeded: Session) -> None:
 def test_missing_draft_raises(seeded: Session) -> None:
     with pytest.raises(ValueError):
         rewrite_flow(seeded, 9999, FakeProvider([]), n=1)
+
+
+class _StubResponse:
+    def __init__(self, status_code: int, content: str = "") -> None:
+        self.status_code = status_code
+        self._content = content
+        self.text = content
+
+    def json(self) -> object:
+        choices = [{"message": {"content": self._content}}]
+        return {"choices": choices, "usage": {}}
+
+
+def _llm_provider(seeded: Session) -> OpenAICompatProvider:
+    from launcher.config import Settings
+    from launcher.params import ParamStore
+
+    return OpenAICompatProvider(
+        Settings(
+            database_url="sqlite://",
+            llm_api_key="test-key",
+            llm_base_url="https://llm.test",
+            llm_model="test-model",
+        ),
+        ParamStore(seeded),
+    )
+
+
+def test_chat_merges_top_up_on_short_first_page(
+    seeded: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import httpx
+
+    calls: list[object] = []
+
+    def fake_post(url: str, headers: object = None, json: object = None, timeout: float = 0) -> _StubResponse:
+        calls.append(json)
+        if len(calls) == 1:
+            return _StubResponse(200, "- first variant")
+        return _StubResponse(200, "- second variant")
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    result = _llm_provider(seeded).generate("Some draft here.", n=2)
+    assert result.texts == ("first variant", "second variant")
+    assert len(calls) == 2
+
+
+def test_chat_raises_on_non_200(
+    seeded: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import httpx
+
+    def fake_post(url: str, headers: object = None, json: object = None, timeout: float = 0) -> _StubResponse:
+        return _StubResponse(500, "boom")
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    with pytest.raises(ProviderError, match="500"):
+        _llm_provider(seeded).generate("Some draft here.", n=1)
 
 
 def test_rank_candidates_orders_scores_and_excludes_vetoed() -> None:
