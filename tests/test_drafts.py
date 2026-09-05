@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from sqlalchemy.orm import Session
 
-from launcher.drafts import DraftScore, score_draft
+from launcher.drafts import DraftScore, DraftStore, score_draft
 from launcher.models import Draft
 from launcher.outcomes import SyntheticOutcomeSource
 from launcher.params import seed_params
@@ -49,6 +49,36 @@ def test_score_draft_returns_gate_verdict_and_seam_score(session: Session) -> No
 def test_score_draft_missing_raises(session: Session) -> None:
     with pytest.raises(ValueError):
         score_draft(session, 9999)
+
+
+def test_store_resolve_returns_variant_without_refetch(session: Session) -> None:
+    from launcher.models import DraftVariant
+
+    draft = _seeded(session)
+    variant = DraftVariant(draft_id=draft.id, text="A variant.", variant_index=0)
+    session.add(variant)
+    session.flush()
+    session.commit()
+    candidate = DraftStore(session).resolve_candidate(draft.id, variant.id)
+    assert candidate.draft.id == draft.id
+    assert candidate.text == "A variant."
+    assert candidate.variant is not None
+    assert candidate.variant.id == variant.id
+
+
+def test_store_resolve_rejects_foreign_variant(session: Session) -> None:
+    from launcher.models import DraftVariant
+
+    first = _seeded(session)
+    second = Draft(text="Other draft here.", project_id=None)
+    session.add(second)
+    session.flush()
+    variant = DraftVariant(draft_id=second.id, text="Other variant.", variant_index=0)
+    session.add(variant)
+    session.flush()
+    session.commit()
+    with pytest.raises(ValueError):
+        DraftStore(session).resolve_candidate(first.id, variant.id)
 
 
 def test_score_draft_uses_predictor_when_model_exists(session: Session) -> None:

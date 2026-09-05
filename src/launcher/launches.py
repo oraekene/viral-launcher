@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
-from launcher.drafts import resolve_candidate_text
+from launcher.drafts import DraftStore
 from launcher.features import extract
 from launcher.models import LaunchEvent
 from launcher.scoring import resolve_score
@@ -49,7 +49,8 @@ def register_launch(
     post_external_id: str | None = None,
     variant_id: int | None = None,
 ) -> LaunchEvent:
-    draft, text = resolve_candidate_text(session, draft_id, variant_id)
+    candidate = DraftStore(session).resolve_candidate(draft_id, variant_id)
+    draft, text = candidate.draft, candidate.text
 
     features = extract(
         text,

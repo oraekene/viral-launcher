@@ -11,23 +11,47 @@ from launcher.scoring import ScoredScore, resolve_score
 
 
 def get_draft_or_raise(session: Session, draft_id: int) -> Draft:
-    draft = session.get(Draft, draft_id)
-    if draft is None:
-        raise ValueError(f"draft {draft_id} not found")
-    return draft
+    return DraftStore(session).get_draft(draft_id)
 
 
 def resolve_candidate_text(
     session: Session, draft_id: int, variant_id: int | None = None
 ) -> tuple[Draft, str]:
-    draft = get_draft_or_raise(session, draft_id)
-    text = draft.text
-    if variant_id is not None:
-        variant = session.get(DraftVariant, variant_id)
-        if variant is None or variant.draft_id != draft_id:
-            raise ValueError(f"variant {variant_id} not found for draft {draft_id}")
-        text = variant.text
-    return draft, text
+    candidate = DraftStore(session).resolve_candidate(draft_id, variant_id)
+    return candidate.draft, candidate.text
+
+
+@dataclass(frozen=True)
+class CandidateText:
+    draft: Draft
+    variant: DraftVariant | None
+    text: str
+
+
+class DraftStore:
+    """Draft persistence adapter: drafts and their variants behind one seam."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def get_draft(self, draft_id: int) -> Draft:
+        draft = self._session.get(Draft, draft_id)
+        if draft is None:
+            raise ValueError(f"draft {draft_id} not found")
+        return draft
+
+    def resolve_candidate(
+        self, draft_id: int, variant_id: int | None = None
+    ) -> CandidateText:
+        draft = self.get_draft(draft_id)
+        variant: DraftVariant | None = None
+        text = draft.text
+        if variant_id is not None:
+            variant = self._session.get(DraftVariant, variant_id)
+            if variant is None or variant.draft_id != draft_id:
+                raise ValueError(f"variant {variant_id} not found for draft {draft_id}")
+            text = variant.text
+        return CandidateText(draft=draft, variant=variant, text=text)
 
 
 @dataclass(frozen=True)

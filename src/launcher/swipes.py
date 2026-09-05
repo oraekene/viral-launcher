@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from launcher.drafts import resolve_candidate_text
+from launcher.drafts import DraftStore
 from launcher.models import Swatch
 
 
@@ -12,21 +12,17 @@ def archive_swatch(
     variant_id: int | None = None,
     actual_z: float | None = None,
 ) -> Swatch:
-    draft, text = resolve_candidate_text(session, draft_id, variant_id)
+    candidate = DraftStore(session).resolve_candidate(draft_id, variant_id)
+    draft, text = candidate.draft, candidate.text
 
     score = 0.0
     score_kind = "interim"
     gate_lines: list[dict[str, str]] = list(draft.gate_report or [])
 
-    if variant_id is not None:
-        from launcher.models import DraftVariant
-
-        variant = session.get(DraftVariant, variant_id)
-        if variant is None:
-            raise ValueError(f"variant {variant_id} not found for draft {draft_id}")
-        score = variant.score
-        score_kind = variant.score_kind or "interim"
-        gate_lines = list(variant.gate_lines or [])
+    if candidate.variant is not None:
+        score = candidate.variant.score
+        score_kind = candidate.variant.score_kind or "interim"
+        gate_lines = list(candidate.variant.gate_lines or [])
 
     swatch = Swatch(
         draft_id=draft_id,
