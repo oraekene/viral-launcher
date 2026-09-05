@@ -51,14 +51,7 @@ class OutcomeRow:
     features: dict[str, float]
     z60: float
     value_flag: bool
-
-
-@dataclass(frozen=True)
-class LauncherOutcomeRow:
-    features: dict[str, float]
-    z60: float
-    value_flag: bool
-    fired_vetoes: tuple[str, ...]
+    fired_vetoes: tuple[str, ...] = ()
 
 
 class OutcomeSource(Protocol):
@@ -66,7 +59,7 @@ class OutcomeSource(Protocol):
 
 
 class LauncherOutcomeSource(Protocol):
-    def load_outcomes(self, project_id: str) -> list[LauncherOutcomeRow]: ...
+    def load_outcomes(self, project_id: str) -> list[OutcomeRow]: ...
 
 
 class SyntheticOutcomeSource:
@@ -108,11 +101,11 @@ class SyntheticLauncherOutcomeSource:
         self._winner_share = winner_share
         self._seed = seed
 
-    def load_outcomes(self, project_id: str) -> list[LauncherOutcomeRow]:
+    def load_outcomes(self, project_id: str) -> list[OutcomeRow]:
         from launcher.predictor import FEATURE_NAMES, feature_vector
 
         rng = random.Random(f"launcher:{project_id}:{self._seed}")
-        rows: list[LauncherOutcomeRow] = []
+        rows: list[OutcomeRow] = []
         for _ in range(self._n):
             winner = rng.random() < self._winner_share
             features, quality = _draw_draft(rng, bait=False)
@@ -129,7 +122,7 @@ class SyntheticLauncherOutcomeSource:
             base = 2.6 if winner else 1.3
             z60 = max(0.0, base + quality * (0.5 if winner else 0.8) + rng.gauss(0.0, 0.7))
             rows.append(
-                LauncherOutcomeRow(
+                OutcomeRow(
                     features=vector,
                     z60=round(z60, 3),
                     value_flag=winner,
@@ -175,9 +168,9 @@ class StagedLauncherOutcomeSource:
     def __init__(self, session: Session) -> None:
         self._loader = _StageLoader(session)
 
-    def load_outcomes(self, project_id: str) -> list[LauncherOutcomeRow]:
+    def load_outcomes(self, project_id: str) -> list[OutcomeRow]:
         return [
-            LauncherOutcomeRow(
+            OutcomeRow(
                 features=dict(r.features),
                 z60=r.z60,
                 value_flag=r.value_flag,

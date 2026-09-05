@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from launcher.metrics import precision_recall
 from launcher.models import PredictorModel, utcnow
 from launcher.outcomes import (
-    LauncherOutcomeRow,
+    OutcomeRow,
     LauncherOutcomeSource,
     OutcomeRow,
     StagedLauncherOutcomeSource,
@@ -41,7 +41,7 @@ class CalibrationReport:
 
 
 class _LauncherAsTrainingSource:
-    def __init__(self, rows: list[LauncherOutcomeRow]) -> None:
+    def __init__(self, rows: list[OutcomeRow]) -> None:
         self._rows = rows
 
     def load_outcomes(self, project_id: str) -> list[OutcomeRow]:
@@ -60,7 +60,7 @@ def _model_age(model: PredictorModel) -> timedelta:
 
 def should_retrain(
     model: PredictorModel,
-    rows: list[LauncherOutcomeRow],
+    rows: list[OutcomeRow],
 ) -> bool:
     if len(rows) < MIN_EVENTS:
         return False
@@ -73,7 +73,7 @@ def should_retrain(
     return abs(recent - reference) / reference > DRIFT_THRESHOLD
 
 
-def _best_f1_threshold(rows: list[LauncherOutcomeRow]) -> tuple[float, float]:
+def _best_f1_threshold(rows: list[OutcomeRow]) -> tuple[float, float]:
     candidates = sorted({r.z60 for r in rows})
     best_t = 2.5
     best_f1 = -1.0
