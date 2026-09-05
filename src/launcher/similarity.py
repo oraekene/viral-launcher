@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable, Sequence
 
 from sqlalchemy.orm import Session
 
@@ -23,15 +24,39 @@ def format_similarity(text_a: str, text_b: str) -> float:
     return overlap / union
 
 
-def max_swatch_similarity(session: Session, project_id: str | None, text: str) -> float:
+def load_swatch_texts(
+    session: Session, project_id: str | None, limit: int = 500
+) -> list[str]:
     if not project_id:
-        return 0.0
-    texts = (
+        return []
+    rows = (
         session.query(Swatch.text)
         .filter(Swatch.project_id == project_id)
-        .limit(500)
+        .limit(limit)
         .all()
     )
-    if not texts:
-        return 0.0
-    return max(format_similarity(text, t[0]) for t in texts)
+    return [text for (text,) in rows]
+
+
+class SwatchCorpus:
+    """Similarity corpus with an injectable loader: pure scoring over any
+    text list, DB-backed via from_session."""
+
+    def __init__(self, load: Callable[[], Sequence[str]]) -> None:
+        self._load = load
+
+    @classmethod
+    def from_session(
+        cls, session: Session, project_id: str | None, limit: int = 500
+    ) -> SwatchCorpus:
+        return cls(lambda: load_swatch_texts(session, project_id, limit))
+
+    def max_similarity(self, text: str) -> float:
+        corpus = list(self._load())
+        if not corpus:
+            return 0.0
+        return max(format_similarity(text, candidate) for candidate in corpus)
+
+
+def max_swatch_similarity(session: Session, project_id: str | None, text: str) -> float:
+    return SwatchCorpus.from_session(session, project_id).max_similarity(text)

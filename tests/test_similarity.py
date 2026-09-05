@@ -15,7 +15,7 @@ from launcher.predictor import (
 )
 from launcher.rewriter import HeuristicProvider, rewrite_flow
 from launcher.rules_seed import seed_rules
-from launcher.similarity import format_similarity
+from launcher.similarity import SwatchCorpus, format_similarity
 
 
 @pytest.fixture()
@@ -33,6 +33,15 @@ def test_identical_texts_score_full_overlap() -> None:
 
 def test_disjoint_texts_score_zero() -> None:
     assert format_similarity("cats sit on mats", "quantum flux capacitors") == 0.0
+
+
+def test_corpus_scores_without_database() -> None:
+    corpus = SwatchCorpus(lambda: ["distribution beats marketing every single time"])
+    assert (
+        corpus.max_similarity("distribution beats marketing every single time") == 1.0
+    )
+    assert corpus.max_similarity("quantum flux capacitors") == 0.0
+    assert SwatchCorpus(lambda: []).max_similarity("anything here") == 0.0
 
 
 def test_partial_overlap_between_zero_and_one() -> None:
