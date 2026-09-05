@@ -14,7 +14,7 @@ from launcher.features import extract
 from launcher.gate import load_engine
 from launcher.labels import label_warnings
 from launcher.models import CostEvent, Draft, DraftVariant
-from launcher.rewriter import RewriteResult, VariantProvider, rewrite_flow
+from launcher.rewriter import RewriteResult, VariantProvider, rewrite_flow, try_rewrite_flow
 
 
 class DraftIn(BaseModel):
@@ -244,19 +244,19 @@ def build_drafts_router(
             draft_out = create_draft(item, session)
             rewrite_out: RewriteOut | None = None
             if data.rewrite:
-                try:
-                    result = rewrite_flow(
-                        session, draft_out.id, get_provider(session), n=data.n
-                    )
-                    rewrite_out = _rewrite_out(result)
-                except BudgetExceeded as exc:
+                attempt = try_rewrite_flow(
+                    session, draft_out.id, get_provider(session), n=data.n
+                )
+                if attempt.result is not None:
+                    rewrite_out = _rewrite_out(attempt.result)
+                else:
                     rewrite_out = RewriteOut(
                         draft_id=draft_out.id,
                         top=[],
                         generated=0,
                         vetoed_count=0,
                         cost_usd=0.0,
-                        error=str(exc),
+                        error=attempt.error,
                     )
             results.append(BatchResultOut(draft=draft_out, rewrite=rewrite_out))
         return BatchOut(results=results)

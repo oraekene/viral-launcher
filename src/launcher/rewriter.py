@@ -317,3 +317,24 @@ def rewrite_flow(
         vetoed_count=vetoed_count,
         cost_usd=gen.usd,
     )
+
+
+@dataclass(frozen=True)
+class RewriteAttempt:
+    """Budget policy next to the rewrite service call: success carries the
+    result, a blown per-draft cap carries the error instead of raising."""
+
+    result: RewriteResult | None
+    error: str | None
+
+
+def try_rewrite_flow(
+    session: Session,
+    draft_id: int,
+    provider: VariantProvider,
+    n: int | None = None,
+) -> RewriteAttempt:
+    try:
+        return RewriteAttempt(result=rewrite_flow(session, draft_id, provider, n), error=None)
+    except BudgetExceeded as exc:
+        return RewriteAttempt(result=None, error=str(exc))

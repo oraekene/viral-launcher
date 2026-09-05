@@ -11,6 +11,7 @@ from launcher.rewriter import (
     HeuristicProvider,
     RewriteResult,
     rewrite_flow,
+    try_rewrite_flow,
 )
 from launcher.rules_seed import seed_rules
 
@@ -124,3 +125,26 @@ def test_per_draft_cap_blocks_repeat_paid_rewrite(seeded: Session) -> None:
 def test_missing_draft_raises(seeded: Session) -> None:
     with pytest.raises(ValueError):
         rewrite_flow(seeded, 9999, FakeProvider([]), n=1)
+
+
+def test_try_rewrite_returns_result_on_success(seeded: Session) -> None:
+    provider = FakeProvider(["Fear was the constraint. What would you add?"])
+    draft = seeded.query(Draft).one()
+    attempt = try_rewrite_flow(seeded, draft.id, provider, n=1)
+    assert attempt.error is None
+    assert attempt.result is not None
+    assert attempt.result.generated == 1
+
+
+def test_try_rewrite_captures_budget_as_error(seeded: Session) -> None:
+    provider = FakeProvider(["A variant."], usd=0.50)
+    draft = seeded.query(Draft).one()
+    attempt = try_rewrite_flow(seeded, draft.id, provider, n=1)
+    assert attempt.result is None
+    assert attempt.error is not None
+    assert "cap" in attempt.error.lower()
+
+
+def test_try_rewrite_reraises_missing_draft(seeded: Session) -> None:
+    with pytest.raises(ValueError):
+        try_rewrite_flow(seeded, 9999, FakeProvider([]), n=1)
