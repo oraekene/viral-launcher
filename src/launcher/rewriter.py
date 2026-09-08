@@ -15,6 +15,7 @@ from launcher.gate import load_engine
 from launcher.models import Draft, DraftVariant
 from launcher.params import ParamStore
 from launcher.scoring import resolve_score
+from launcher.similarity import format_similarity
 
 
 @dataclass(frozen=True)
@@ -232,19 +233,42 @@ def rank_candidates(
     vetoed: Sequence[bool],
     *,
     limit: int = 3,
+    texts: Sequence[str] | None = None,
+    max_similarity: float = 0.8,
 ) -> list[int]:
     """Pure ranking policy: indices of the top non-vetoed candidates by
-    score, highest first; stable on ties."""
+    score, highest first; stable on ties. With texts, near-duplicates of an
+    already-picked candidate yield their slot (backfilled in score order if
+    short) — a small mirror of production's diversity reranking."""
     if len(scores) != len(vetoed):
         raise ValueError(
             f"scores ({len(scores)}) and vetoed ({len(vetoed)}) disagree in length"
         )
-    order = sorted(
+    if texts is not None and len(texts) != len(scores):
+        raise ValueError(
+            f"texts ({len(texts)}) and scores ({len(scores)}) disagree in length"
+        )
+    pool = sorted(
         (i for i in range(len(scores)) if not vetoed[i]),
         key=lambda i: scores[i],
         reverse=True,
     )
-    return order[:limit]
+    if texts is None:
+        return pool[:limit]
+    picked: list[int] = []
+    skipped: list[int] = []
+    for i in pool:
+        if all(format_similarity(texts[i], texts[j]) <= max_similarity for j in picked):
+            picked.append(i)
+            if len(picked) >= limit:
+                break
+        else:
+            skipped.append(i)
+    for s in skipped:
+        if len(picked) >= limit:
+            break
+        picked.append(s)
+    return picked[:limit]
 
 
 def rewrite_flow(
@@ -330,7 +354,7 @@ def rewrite_flow(
             reasons=tuple(rows[i].reasons),
             gate_lines=tuple(rows[i].gate_lines or ()),
         )
-        for i in rank_candidates(scores, vetoes)
+        for i in rank_candidates(scores, vetoes, texts=candidates)
     )
     return RewriteResult(
         draft_id=draft_id,

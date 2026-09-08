@@ -221,6 +221,26 @@ def test_rank_candidates_rejects_mismatched_lengths() -> None:
         rank_candidates([1.0, 2.0], [False])
 
 
+def test_rank_skips_near_duplicates() -> None:
+    texts = [
+        "Distribution beats marketing every single time",
+        "Distribution beats marketing every time",
+        "Quantum flux capacitors hum softly",
+    ]
+    idx = rank_candidates([5.0, 4.9, 4.0], [False, False, False], texts=texts, limit=2)
+    assert idx == [0, 2]
+
+
+def test_rank_backfills_when_all_similar() -> None:
+    texts = ["aaa bbb ccc ddd", "aaa bbb ccc ddd"]
+    assert rank_candidates([5.0, 4.9], [False, False], texts=texts) == [0, 1]
+
+
+def test_rank_texts_length_mismatch_raises() -> None:
+    with pytest.raises(ValueError):
+        rank_candidates([1.0], [False], texts=[])
+
+
 def test_try_rewrite_returns_result_on_success(seeded: Session) -> None:
     provider = FakeProvider(["Fear was the constraint. What would you add?"])
     draft = seeded.query(Draft).one()
