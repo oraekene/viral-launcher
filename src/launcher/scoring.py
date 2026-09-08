@@ -46,6 +46,18 @@ def interim_score(features: DraftFeatures, store: ParamStore) -> ScoreResult:
         w = store.get_float("weight.quote")
         terms.append((w, "quotable claim present", "weight.quote"))
 
+    if features.has_save_cue:
+        w = store.get_float("weight.share_dm")
+        terms.append((w, "DM/share elicitor present", "weight.share_dm"))
+
+    if features.has_follow_cue:
+        w = store.get_float("weight.follow")
+        terms.append((w, "follow elicitor present", "weight.follow"))
+
+    if features.link_count >= 1:
+        w = store.get_float("weight.open_link")
+        terms.append((w, "link open elicitor present", "weight.open_link"))
+
     if features.quotable_claim and features.link_count == 0 and features.char_len <= 200:
         w = store.get_float("weight.share")
         terms.append((w, "shareable standalone claim", "weight.share"))

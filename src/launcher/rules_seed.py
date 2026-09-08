@@ -62,6 +62,22 @@ def _rule_quotable(f: DraftFeatures, store: ParamStore) -> tuple[LineVerdict, st
     return "warn", f"no quotable claim; quotes weigh {w}"
 
 
+def _rule_save_cue(f: DraftFeatures, store: ParamStore) -> tuple[LineVerdict, str]:
+    w = store.get_float("weight.share_dm")
+    if f.has_save_cue:
+        return "pass", f"save/share cue present (weight.share_dm={w})"
+    return "info", f"no save/share cue; DM shares weigh {w}, copy-link shares 20.0"
+
+
+def _rule_follow(f: DraftFeatures, store: ParamStore) -> tuple[LineVerdict, str]:
+    w = store.get_float("weight.follow")
+    if f.engagement_bait_hits:
+        return "pass", "follow-bait phrasing vetoed above; genuine follow cues only"
+    if f.has_follow_cue:
+        return "pass", f"follow elicitor present (weight.follow={w})"
+    return "info", f"no follow elicitor; follows weigh {w} (bait phrasing stays vetoed)"
+
+
 def _rule_hashtags(f: DraftFeatures, store: ParamStore) -> tuple[LineVerdict, str]:
     if f.hashtag_count > 3:
         return "warn", f"{f.hashtag_count} hashtags reads as spam"
@@ -188,6 +204,18 @@ RULE_SEED: tuple[RuleSpec, ...] = (
         _rule_quotable,
         "weight.quote",
         "Quotes weigh 5.0 (assumed x-algorithm production weight, Aug 13 2026)",
+    ),
+    RuleSpec(
+        "elicitation.save_share",
+        _rule_save_cue,
+        "weight.share_dm",
+        "DM shares weigh 5.0, copy-link shares 20.0 (x-algorithm param.rs, read 2026-09)",
+    ),
+    RuleSpec(
+        "elicitation.follow",
+        _rule_follow,
+        "weight.follow",
+        "Follows weigh 4.0 (x-algorithm param.rs, read 2026-09); follow-bait phrasing stays vetoed",
     ),
     RuleSpec(
         "hashtags.spam",

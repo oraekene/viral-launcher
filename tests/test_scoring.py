@@ -46,6 +46,24 @@ def test_shareable_claim_adds_share_weight(session: Session) -> None:
     assert s_share > s_link >= 0
 
 
+def test_save_follow_and_link_cues_add_weights(session: Session) -> None:
+    store = _store(session)
+    base = interim_score(extract("Distribution beats marketing."), store).score
+    assert (
+        interim_score(extract("Save this for later. Distribution wins."), store).score
+        > base
+    )
+    assert (
+        interim_score(extract("Follow for daily notes. Distribution wins."), store).score
+        > base
+    )
+    assert (
+        interim_score(
+            extract("Distribution beats marketing https://example.com/long-read-here"),
+            store,
+        ).score
+        > base
+    )
 def test_vetoed_features_are_never_scored_here_by_convention(
     session: Session,
 ) -> None:

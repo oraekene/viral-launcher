@@ -53,6 +53,19 @@ def test_cta_without_question_mark() -> None:
     assert f.has_question is False
 
 
+def test_save_cue_detected() -> None:
+    f = extract("Save this thread for later reference.")
+    assert f.has_save_cue is True
+    assert extract("Plain statement here.").has_save_cue is False
+
+
+def test_follow_cue_detected_but_not_on_bait() -> None:
+    assert extract("Follow for daily shipping notes.").has_follow_cue is True
+    bait = extract("Follow me and tag someone who needs this.")
+    assert bait.has_follow_cue is False
+    assert bait.engagement_bait_hits != ()
+
+
 def test_author_and_network_passthrough() -> None:
     f = extract("Hello world.", author_followers=800, mutuals_count=3)
     assert f.author_followers == 800

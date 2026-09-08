@@ -52,6 +52,22 @@ CTA_PATTERNS: tuple[str, ...] = (
     "curious how",
 )
 
+SAVE_CUE_PATTERNS: tuple[str, ...] = (
+    "save this",
+    "save for later",
+    "send this to",
+    "share this with",
+    "bookmark this",
+    "forward this",
+)
+
+FOLLOW_CUE_PATTERNS: tuple[str, ...] = (
+    "follow for",
+    "follow to",
+    "follow if",
+    "follow along",
+)
+
 _LINK_RE = re.compile(r"https?://\S+")
 _HASHTAG_RE = re.compile(r"#\w+")
 _MENTION_RE = re.compile(r"@\w+")
@@ -79,6 +95,8 @@ class DraftFeatures:
     mutuals_count: int | None
     scheduled_at: datetime | None
     allow_premium_length: bool
+    has_save_cue: bool = False
+    has_follow_cue: bool = False
 
 
 def extract(
@@ -113,4 +131,6 @@ def extract(
         mutuals_count=mutuals_count,
         scheduled_at=scheduled_at,
         allow_premium_length=allow_premium_length,
+        has_save_cue=any(p in lowered for p in SAVE_CUE_PATTERNS),
+        has_follow_cue=any(p in lowered for p in FOLLOW_CUE_PATTERNS),
     )

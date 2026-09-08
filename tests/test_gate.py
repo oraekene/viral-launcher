@@ -156,5 +156,29 @@ def test_disabled_rule_is_skipped(session: Session, engine: GateEngine) -> None:
     assert all(l.rule_id != "elicitation.question" for l in report.lines)
 
 
+def test_save_and_follow_cues_pass_without_verdict_impact(
+    engine: GateEngine,
+) -> None:
+    f = extract("Save this for later. Follow for daily shipping notes.")
+    report = engine.evaluate(f)
+    by_id = {line.rule_id: line for line in report.lines}
+    assert by_id["elicitation.save_share"].verdict == "pass"
+    assert by_id["elicitation.follow"].verdict == "pass"
+
+
+def test_missing_cues_are_info_not_warnings(engine: GateEngine) -> None:
+    f = extract(CLEAN_DRAFT)
+    report = engine.evaluate(f)
+    by_id = {line.rule_id: line for line in report.lines}
+    assert by_id["elicitation.save_share"].verdict == "info"
+    assert by_id["elicitation.follow"].verdict == "info"
+
+
+def test_follow_bait_stays_vetoed(engine: GateEngine) -> None:
+    f = extract("Follow me and tag someone who needs this.")
+    report = engine.evaluate(f)
+    assert report.verdict == "vetoed"
+
+
 def test_rule_seed_covers_negatives_first() -> None:
     assert RULE_SEED[0].name.startswith("negative.")
