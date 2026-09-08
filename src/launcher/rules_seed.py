@@ -255,16 +255,22 @@ RULE_FNS: dict[str, RuleFn] = {spec.name: spec.fn for spec in RULE_SEED}
 
 
 def seed_rules(session: Session) -> None:
-    existing = {r.name for r in session.query(GateRule).all()}
+    """Insert missing rules; refresh copy (source note, param ref, position)
+    on existing ones. The enabled flag is operator state and never touched."""
+    existing = {r.name: r for r in session.query(GateRule).all()}
     for pos, spec in enumerate(RULE_SEED):
-        if spec.name in existing:
-            continue
-        session.add(
-            GateRule(
-                name=spec.name,
-                position=pos,
-                param_ref=spec.param_ref,
-                source_note=spec.source_note,
-                enabled=True,
+        row = existing.get(spec.name)
+        if row is None:
+            session.add(
+                GateRule(
+                    name=spec.name,
+                    position=pos,
+                    param_ref=spec.param_ref,
+                    source_note=spec.source_note,
+                    enabled=True,
+                )
             )
-        )
+        else:
+            row.position = pos
+            row.param_ref = spec.param_ref
+            row.source_note = spec.source_note

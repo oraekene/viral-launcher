@@ -180,5 +180,40 @@ def test_follow_bait_stays_vetoed(engine: GateEngine) -> None:
     assert report.verdict == "vetoed"
 
 
+def test_reseed_refreshes_copy_preserves_enabled(session: Session) -> None:
+    from launcher.models import GateRule, ParamVersion
+    from launcher.params import ParamStore, seed_params
+    from launcher.rules_seed import RULE_SEED
+
+    seed_params(session)
+    seed_rules(session)
+    session.commit()
+
+    rule = session.query(GateRule).filter_by(name="elicitation.question").one()
+    rule.enabled = False
+    rule.source_note = "stale"
+    rule.position = 99
+    pv = session.query(ParamVersion).filter_by(key="weight.reply").one()
+    pv.value = 999.0
+    pv.status = "calibrated"
+    pv.source_note = "stale"
+    session.commit()
+
+    seed_params(session)
+    seed_rules(session)
+    session.commit()
+
+    fresh = session.query(GateRule).filter_by(name="elicitation.question").one()
+    assert fresh.enabled is False
+    assert fresh.source_note != "stale"
+    rows = session.query(GateRule).order_by(GateRule.position).all()
+    assert [r.name for r in rows] == [spec.name for spec in RULE_SEED]
+    assert "elicitation.save_share" in {r.name for r in rows}
+    store = ParamStore(session)
+    assert store.get_float("weight.reply") == 999.0
+    assert store.get("weight.reply").status == "calibrated"
+    assert store.get("weight.reply").source_note != "stale"
+
+
 def test_rule_seed_covers_negatives_first() -> None:
     assert RULE_SEED[0].name.startswith("negative.")

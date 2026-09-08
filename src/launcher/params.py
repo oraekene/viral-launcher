@@ -28,19 +28,19 @@ PARAM_SEED: tuple[ParamSpec, ...] = (
         "weight.share_dm",
         5.0,
         "assumed",
-        "x-algorithm home-mixer/params/param.rs (ShareViaDmWeight 5.0), read 2026-09; not vendored",
+        "x-algorithm home-mixer/params/param.rs (ShareViaDmWeight 5.0), read 2026-09; not vendored; production experiments can move values without notice",
     ),
     ParamSpec(
         "weight.follow",
         4.0,
         "assumed",
-        "x-algorithm home-mixer/params/param.rs (FollowAuthorWeight 4.0), read 2026-09; not vendored",
+        "x-algorithm home-mixer/params/param.rs (FollowAuthorWeight 4.0), read 2026-09; not vendored; production experiments can move values without notice",
     ),
     ParamSpec(
         "weight.open_link",
         0.2,
         "assumed",
-        "x-algorithm home-mixer/params/param.rs (OpenLinkWeight 0.2), read 2026-09; not vendored",
+        "x-algorithm home-mixer/params/param.rs (OpenLinkWeight 0.2), read 2026-09; not vendored; production experiments can move values without notice",
     ),
     ParamSpec("weight.repost", 1.0, "assumed", _XALGO),
     ParamSpec("weight.like", 0.5, "assumed", _XALGO),
@@ -116,18 +116,22 @@ class ParamValue:
 
 
 def seed_params(session: Session) -> None:
-    existing = {row.key for row in session.query(ParamVersion).all()}
+    """Insert missing params; refresh provenance notes on existing ones.
+    Value and status are operator/calibration state and never touched."""
+    existing = {row.key: row for row in session.query(ParamVersion).all()}
     for spec in PARAM_SEED:
-        if spec.key in existing:
-            continue
-        session.add(
-            ParamVersion(
-                key=spec.key,
-                value=spec.value,
-                status=spec.status,
-                source_note=spec.source_note,
+        row = existing.get(spec.key)
+        if row is None:
+            session.add(
+                ParamVersion(
+                    key=spec.key,
+                    value=spec.value,
+                    status=spec.status,
+                    source_note=spec.source_note,
+                )
             )
-        )
+        elif row.source_note != spec.source_note:
+            row.source_note = spec.source_note
 
 
 class ParamStore:
