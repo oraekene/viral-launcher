@@ -82,11 +82,13 @@ def _rule_mutuals(f: DraftFeatures, store: ParamStore) -> tuple[LineVerdict, str
         return "info", "mutuals count not provided; cannot plan follower-first engagement"
     if f.mutuals_count == 0:
         return "warn", (
-            f"no mutuals pre-armed; strangers engage at x{oon} "
-            f"(bidirectional reply boost +{boost} unavailable)"
+            f"no mutual followers; strangers engage at x{oon} "
+            f"and the +{boost} reply boost needs mutuals viewing your originals"
         )
     return "pass", (
-        f"{f.mutuals_count} mutuals can pre-arm the +{boost} bidirectional reply boost"
+        f"{f.mutuals_count} mutual followers can earn the +{boost} reply boost "
+        "on your original posts; replies/retweets score "
+        f"x{oon} even in-network — post originals"
     )
 
 
@@ -95,14 +97,16 @@ def _rule_new_boost(f: DraftFeatures, store: ParamStore) -> tuple[LineVerdict, s
     decay = store.get_float("author.diversity_decay")
     floor = store.get_float("author.diversity_floor")
     diversity_note = (
-        f"same-author streaks decay x{decay} (floor {floor}); vary sources"
+        f"each additional same-author post in a viewer's slate decays x{decay} "
+        f"(floor {floor}); vary voices and formats"
     )
     if f.author_followers is None:
         return "info", f"follower count not provided; {diversity_note}"
     if f.author_followers <= cap:
         return "info", (
-            f"account at {f.author_followers} followers qualifies for the "
-            f"new-author cold-start boost (cap {cap}); {diversity_note}"
+            f"account at {f.author_followers} followers (cap {cap}); the lift "
+            "keys off impressions (<~1000), surfacing new voices near the top "
+            f"slots; {diversity_note}"
         )
     return "pass", (
         f"account at {f.author_followers} followers (above cold-start cap {cap}); "
@@ -145,7 +149,9 @@ RULE_SEED: tuple[RuleSpec, ...] = (
         "negative.engagement_bait",
         _rule_bait,
         None,
-        "X anti-gaming systems (bdsm inauthentic-engagement labeling); downside is report -234 / not-interested -43.2",
+        "X anti-gaming systems (bdsm inauthentic-engagement labeling); bait raises "
+        "the predicted likelihood of report (-234) / not-interested (-43.2) "
+        "actions — weights scale probabilities, not counts",
     ),
     RuleSpec(
         "negative.mass_reply_template",
@@ -199,13 +205,15 @@ RULE_SEED: tuple[RuleSpec, ...] = (
         "network.mutual_plan",
         _rule_mutuals,
         "boost.bidirectional_reply",
-        "Bidirectional-follow reply boost +15; out-of-network discount x0.75",
+        "Bidirectional reply boost +15 for mutuals viewing your original posts; "
+        "out-of-network x0.75 (in-network replies/retweets also discounted)",
     ),
     RuleSpec(
         "author.new_boost",
         _rule_new_boost,
         "cold_start.follower_cap",
-        "New-author cold-start boost at <=1000 followers; author diversity decay x0.5 floor 0.25",
+        "Cold-start lift below ~1000 impressions toward top slots (follower cap "
+        "1000); author diversity decay x0.5 floor 0.25 per slate",
     ),
     RuleSpec(
         "timing.engagement_window",
