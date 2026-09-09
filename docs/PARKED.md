@@ -13,10 +13,18 @@ whole-tree pass was judged low-value. Reopen if a change lands without
 per-diff review.
 
 ## P-002: Single global viral flag rejected (declined 2026-09-09)
-
 Any one fixed number (raw z ≥ 2.5, 100k likes, 500k views) as the
 cross-voice definition of viral. Declined: heavy-tailed engagement makes
 fixed bars meaningless across voices (a 43× median peak under 1k
 followers vs ~15× at 100k–1M), and 2023-fitted constants were tuned under
 a retired ranking regime. Replaced by the three-slot per-voice rule
 (ADR-0009). Reopen only with per-voice evidence for a global value.
+
+## P-003: Full DPP reranking not reproduced (accepted 2026-09-09)
+
+Production reranks with a determinantal point process (θ=0.65); the
+launcher's top-3 uses skip-near-duplicates-plus-backfill instead.
+Accepted: at top-3 scale the full DPP math buys nothing over greedy
+dedup, and the job (no near-identical neighbours) is what matters, not
+the mechanism. Reopen if ranking lists grow beyond top-3 or duplicate
+leakage is observed in practice.
