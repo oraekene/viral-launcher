@@ -40,6 +40,12 @@ Is a good post one that gets:
 
 ### 3. Which accounts should we watch first to learn what works?
 
+Options — pick one:
+
+- Full list — 5 to 15 accounts for each group below (stronger at first calibration)
+- Formats first — just the last group for now (fastest start; rest can follow later)
+- Skip for now — start generic, learn from your own results instead
+
 Give us 5 to 15 accounts for each group if you can:
 
 - Direct competitors:
@@ -50,6 +56,28 @@ Give us 5 to 15 accounts for each group if you can:
 >
 - Accounts that make post formats you like:
 >
+
+_How to choose: you can pick whatever group you like; the tool works with
+any choice. If you list only format accounts, templates learn post shapes
+such as hooks, threads, and CTAs (calls to action) but learn nothing about
+audiences, so early winner-share bands and reply rates stay generic until
+your voices gather real rows. Competitor and customer accounts would have
+grounded those audience numbers from day one and given the funnel
+known-good accounts to watch, so skipping them delays audience fit but
+costs no later accuracy since calibration overwrites templates with real
+outcomes. Formats-only is therefore the fastest start with the weakest
+prior; the full list is slower now but stronger at first calibration._
+
+_In plain terms: you can pick whatever group you like; the tool works with
+any choice. If you list only accounts whose post style you like, the tool
+learns how good posts look but learns nothing about who reads them, so its
+early guesses about what succeeds stay vague until your own accounts
+collect real results. Listing competitors and customers too would teach it
+whose attention matters from the start and give it accounts worth watching,
+so skipping them only delays that understanding while later real results
+still correct everything. Style-only is the quickest start with the
+roughest early guesses; the full list takes longer now but guesses better
+at first._
 
 ## Part 2 — Is X Limiting Your Account?
 
