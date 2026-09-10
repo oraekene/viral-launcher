@@ -78,3 +78,8 @@ def test_batch_processes_file(tmp_path: Path) -> None:
 def test_unknown_command_exits_2(tmp_path: Path) -> None:
     proc = _run(tmp_path / "cli.db", "frobnicate")
     assert proc.returncode == 2
+
+
+def test_batch_missing_file_exits_nonzero(tmp_path: Path) -> None:
+    proc = _run(tmp_path / "cli.db", "batch", str(tmp_path / "absent.json"))
+    assert proc.returncode != 0

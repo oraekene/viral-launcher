@@ -156,7 +156,7 @@ def train_predictor(
         band_width=round(max(variance**0.5, 0.25), 4),
         status="pending",
         algorithm=ALGORITHM,
-        source=getattr(source, "origin", None) or type(source).__name__,
+        source=getattr(source, "__class__").__name__,
         feature_names=list(FEATURE_NAMES),
         feature_importances=importances,
         model_blob=pickle.dumps(final),

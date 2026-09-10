@@ -15,7 +15,7 @@ from launcher.features import extract
 from launcher.gate import load_engine
 from launcher.models import Draft
 from launcher.params import ParamStore
-from launcher.rewriter import default_provider, rewrite_flow
+from launcher.rewriter import default_provider, rewrite_flow, try_rewrite_flow
 
 
 @contextmanager
@@ -86,13 +86,21 @@ def _batch_payload(settings: Settings, args: argparse.Namespace) -> dict[str, ob
             session.flush()
             entry: dict[str, object] = {"draft_id": draft.id}
             if args.rewrite:
-                result = rewrite_flow(session, draft.id, provider, n=args.n)
-                entry["top"] = [
-                    {"id": v.id, "text": v.text, "score": v.score}
-                    for v in result.top
-                ]
-                entry["vetoed_count"] = result.vetoed_count
-                entry["cost_usd"] = result.cost_usd
+                attempt = try_rewrite_flow(session, draft.id, provider, n=args.n)
+                if attempt.result is not None:
+                    result = attempt.result
+                    entry["top"] = [
+                        {"id": v.id, "text": v.text, "score": v.score}
+                        for v in result.top
+                    ]
+                    entry["vetoed_count"] = result.vetoed_count
+                    entry["cost_usd"] = result.cost_usd
+                    entry["error"] = None
+                else:
+                    entry["top"] = []
+                    entry["vetoed_count"] = 0
+                    entry["cost_usd"] = 0.0
+                    entry["error"] = attempt.error
             else:
                 engine = load_engine(session)
                 report = engine.evaluate(extract(text))

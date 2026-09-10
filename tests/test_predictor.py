@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import pytest
 from sqlalchemy.orm import Session
 
 from launcher.features import extract

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-import pytest
 from sqlalchemy.orm import Session
 
 from launcher.calibration import (
@@ -11,9 +10,9 @@ from launcher.calibration import (
     decide_calibration,
     run_calibration,
 )
-from launcher.models import Base, ParamVersion, PredictorModel
+from launcher.models import ParamVersion, PredictorModel
 from launcher.outcomes import OutcomeRow, StagedOutcomeSource, SyntheticOutcomeSource, stage_radar_outcomes
-from launcher.predictor import train_predictor
+from launcher.predictor import active_model, train_predictor
 
 
 def test_refuses_to_calibrate_without_evidence(seeded: Session) -> None:
@@ -194,8 +193,6 @@ def test_retrain_happens_during_run_when_drifted(seeded: Session) -> None:
 
 
 def test_retrained_model_keeps_origin_source(seeded: Session) -> None:
-    from launcher.predictor import active_model
-
     model = train_predictor(seeded, "proj", SyntheticOutcomeSource(n=300))
     ref = model.training_winner_share
     run_calibration(
