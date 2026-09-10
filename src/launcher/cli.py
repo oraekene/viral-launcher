@@ -103,17 +103,17 @@ def _batch_payload(settings: Settings, args: argparse.Namespace) -> dict[str, ob
 
 
 def _relay_sync_payload(settings: Settings, args: argparse.Namespace) -> dict[str, object]:
-    from launcher.relay import relay_sync
+    from launcher.relay import VoiceKey, relay_sync
+    from launcher.relay_routes import RelaySyncIn
 
-    payload = json.loads(Path(args.path).read_text(encoding="utf-8"))
+    data = RelaySyncIn.model_validate(json.loads(Path(args.path).read_text(encoding="utf-8")))
     with session_scope(settings) as session:
         result = relay_sync(
             session,
-            str(payload["worker_user_id"]),
-            str(payload["screen_name"]),
-            list(payload.get("tweets") or []),
-            author_followers=payload.get("author_followers"),
-            mutuals_count=payload.get("mutuals_count"),
+            VoiceKey(data.worker_user_id, data.screen_name),
+            [t.model_dump() for t in data.tweets],
+            author_followers=data.author_followers,
+            mutuals_count=data.mutuals_count,
         )
         session.commit()
     report = result.report

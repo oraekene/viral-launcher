@@ -89,7 +89,7 @@ def _model_out(m: PredictorModel) -> ModelOut:
     )
 
 
-def _calibration_report_out(report: CalibrationReport) -> CalibrationReportOut:
+def calibration_report_out(report: CalibrationReport) -> CalibrationReportOut:
     return CalibrationReportOut(
         project_id=report.project_id,
         calibrated=report.calibrated,
@@ -151,7 +151,7 @@ def build_models_router(
             )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-        return _calibration_report_out(report)
+        return calibration_report_out(report)
 
     @router.get("/calibration/status", response_model=CalibrationStatusOut)
     def calibration_status(

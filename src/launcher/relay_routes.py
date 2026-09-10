@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
-from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from launcher.models import VoiceBinding
-from launcher.models_routes import CalibrationReportOut, FlaggedVetoOut
-from launcher.relay import bind_voice, relay_sync
+from launcher.models_routes import CalibrationReportOut, calibration_report_out
+from launcher.relay import VoiceKey, bind_voice, relay_sync
 
 
 class VoiceIn(BaseModel):
@@ -47,23 +46,6 @@ class RelaySyncOut(BaseModel):
     calibration: CalibrationReportOut
 
 
-def _report_out(report: Any) -> CalibrationReportOut:
-    return CalibrationReportOut(
-        project_id=report.project_id,
-        calibrated=report.calibrated,
-        applied=report.applied,
-        n_outcomes=report.n_outcomes,
-        winner_share=report.winner_share,
-        new_z_trigger=report.new_z_trigger,
-        flagged_vetoes=[
-            FlaggedVetoOut(rule_name=f.rule_name, winner_count=f.winner_count)
-            for f in report.flagged_vetoes
-        ],
-        retrained=report.retrained,
-        reason=report.reason,
-    )
-
-
 def build_relay_router(
     get_session: Callable[[], Iterator[Session]],
 ) -> APIRouter:
@@ -75,7 +57,7 @@ def build_relay_router(
     ) -> VoiceOut:
         try:
             row = bind_voice(
-                session, data.worker_user_id, data.screen_name, data.project_id
+                session, VoiceKey(data.worker_user_id, data.screen_name), data.project_id
             )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -108,8 +90,7 @@ def build_relay_router(
         try:
             result = relay_sync(
                 session,
-                data.worker_user_id,
-                data.screen_name,
+                VoiceKey(data.worker_user_id, data.screen_name),
                 [t.model_dump() for t in data.tweets],
                 author_followers=data.author_followers,
                 mutuals_count=data.mutuals_count,
@@ -119,7 +100,7 @@ def build_relay_router(
         return RelaySyncOut(
             project_id=result.project_id,
             staged=result.staged,
-            calibration=_report_out(result.report),
+            calibration=calibration_report_out(result.report),
         )
 
     return router
