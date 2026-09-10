@@ -18,6 +18,7 @@ today and on a polled fetch later.
 
 from __future__ import annotations
 
+import math
 import statistics
 from dataclasses import dataclass
 from typing import Any
@@ -40,12 +41,14 @@ def engagement_value(tweet: dict[str, Any], store: ParamStore) -> float:
     Uses the production elicitation weights from params (reply 5.0,
     repost 1.0, like 0.5): the same scale the interim score prices
     elicitation at, so observed and predicted z stay comparable.
-    Relay mappings carry no quote counts, so quotes price at zero here.
+    Quote counts ride along when the relay sends them (xreader does
+    not parse them yet, so they price at zero until then).
     """
     try:
         likes = int(tweet["favorite_count"])
         reposts = int(tweet["retweet_count"])
         replies = int(tweet["reply_count"])
+        quotes = int(tweet.get("quote_count", 0))
     except (KeyError, TypeError, ValueError) as exc:
         raise ValueError(
             f"tweet {tweet.get('id')!r} misses engagement counts: {exc}"
@@ -54,21 +57,32 @@ def engagement_value(tweet: dict[str, Any], store: ParamStore) -> float:
         store.get_float("weight.reply") * replies
         + store.get_float("weight.repost") * reposts
         + store.get_float("weight.like") * likes
+        + store.get_float("weight.quote") * quotes
     )
 
 
-def _voice_row(
-    session: Session, worker_user_id: str, screen_name: str
-) -> VoiceBinding | None:
+@dataclass(frozen=True)
+class VoiceKey:
+    """Worker user + X account identity for one voice (ADR-0001)."""
+
+    worker_user_id: str
+    screen_name: str
+
+    def __post_init__(self) -> None:
+        user = self.worker_user_id.strip()
+        handle = self.screen_name.strip().casefold()
+        if not user or not handle:
+            raise ValueError("worker_user_id and screen_name are both required")
+        object.__setattr__(self, "worker_user_id", user)
+        object.__setattr__(self, "screen_name", handle)
+
+
+def _voice_row(session: Session, key: VoiceKey) -> VoiceBinding | None:
     return (
         session.query(VoiceBinding)
-        .filter_by(worker_user_id=worker_user_id, screen_name=screen_name)
+        .filter_by(worker_user_id=key.worker_user_id, screen_name=key.screen_name)
         .one_or_none()
     )
-
-
-def _normalize_handle(screen_name: str) -> str:
-    return screen_name.strip().casefold()
 
 
 def _flag_threshold(session: Session, project_id: str) -> float:
@@ -90,12 +104,28 @@ def normalize_own_posts(
 ) -> list[OutcomeRow]:
     """Relay tweet mappings to outcome rows for one voice.
 
-    z60 is each tweet's engagement multiple of the batch median —
-    batch-scoped by design; the trailing window (#13), log scale (#14),
-    and absolute floor (#12) refine it later.
+    z60 is the natural log of each tweet's engagement multiple of the
+    batch median (#14, Dartmouth style): log-scale de-tails the
+    heavy-tailed counts so z-scores regain meaning, while the 2.5-scale
+    threshold stays meaningful (ln needs ~12x median). Zero engagement
+    or zero baseline yields 0.0. Relay rows are log-scale; do not mix
+    synthetic (raw-scale) rows into one voice's calibration.
+    The trailing window (#13) and absolute floor (#12) refine this later.
+    Repeat tweet ids in one batch stage once (cross-sync repeats stay
+    append-only, like import).
     """
     if not tweets:
         raise ValueError("no relay tweets to normalize")
+    seen: set[Any] = set()
+    unique: list[dict[str, Any]] = []
+    for tweet in tweets:
+        tweet_id = tweet.get("id")
+        if tweet_id is not None:
+            if tweet_id in seen:
+                continue
+            seen.add(tweet_id)
+        unique.append(tweet)
+    tweets = unique
     store = ParamStore(session)
     engine = load_engine(session)
     threshold = _flag_threshold(session, project_id)
@@ -120,7 +150,7 @@ def normalize_own_posts(
     baseline = statistics.median(values)
     rows: list[OutcomeRow] = []
     for (vector, vetoes), value in zip(prepared, values):
-        z60 = round(value / baseline, 4) if baseline > 0 else 0.0
+        z60 = round(math.log(value / baseline), 4) if value > 0 and baseline > 0 else 0.0
         rows.append(
             OutcomeRow(
                 features=vector,
@@ -132,23 +162,20 @@ def normalize_own_posts(
     return rows
 
 
-def bind_voice(
-    session: Session, worker_user_id: str, screen_name: str, project_id: str
-) -> VoiceBinding:
+def bind_voice(session: Session, key: VoiceKey, project_id: str) -> VoiceBinding:
     """Bind (or rebind) a Worker user + account to a launcher project.
 
     Voice to project stays 1:1 both ways (ADR-0001): a project already
     bound to another voice refuses the bind instead of silently merging.
     """
-    screen_name = _normalize_handle(screen_name)
-    if not worker_user_id.strip() or not screen_name or not project_id.strip():
-        raise ValueError("worker_user_id, screen_name, and project_id are all required")
+    if not project_id.strip():
+        raise ValueError("project_id is required")
     taken = (
         session.query(VoiceBinding)
         .filter(
             VoiceBinding.project_id == project_id,
-            (VoiceBinding.worker_user_id != worker_user_id)
-            | (VoiceBinding.screen_name != screen_name),
+            (VoiceBinding.worker_user_id != key.worker_user_id)
+            | (VoiceBinding.screen_name != key.screen_name),
         )
         .one_or_none()
     )
@@ -157,11 +184,11 @@ def bind_voice(
             f"project {project_id!r} already belongs to "
             f"user {taken.worker_user_id!r} account {taken.screen_name!r}"
         )
-    row = _voice_row(session, worker_user_id, screen_name)
+    row = _voice_row(session, key)
     if row is None:
         row = VoiceBinding(
-            worker_user_id=worker_user_id,
-            screen_name=screen_name,
+            worker_user_id=key.worker_user_id,
+            screen_name=key.screen_name,
             project_id=project_id,
         )
         session.add(row)
@@ -171,11 +198,9 @@ def bind_voice(
     return row
 
 
-def resolve_project(
-    session: Session, worker_user_id: str, screen_name: str
-) -> str | None:
+def resolve_project(session: Session, key: VoiceKey) -> str | None:
     """The launcher project bound to a Worker user + account, if any."""
-    row = _voice_row(session, worker_user_id, _normalize_handle(screen_name))
+    row = _voice_row(session, key)
     return row.project_id if row is not None else None
 
 
@@ -188,27 +213,25 @@ class RelaySyncResult:
 
 def relay_sync(
     session: Session,
-    worker_user_id: str,
-    screen_name: str,
+    key: VoiceKey,
     tweets: list[dict[str, Any]],
     *,
     author_followers: int | None = None,
     mutuals_count: int | None = None,
 ) -> RelaySyncResult:
     """Full adapter loop: resolve voice, normalize, stage, calibrate."""
-    screen_name = _normalize_handle(screen_name)
-    project_id = resolve_project(session, worker_user_id, screen_name)
+    project_id = resolve_project(session, key)
     if project_id is None:
         raise ValueError(
-            f"no voice binding for user {worker_user_id!r} "
-            f"account {screen_name!r}; bind it first"
+            f"no voice binding for user {key.worker_user_id!r} "
+            f"account {key.screen_name!r}; bind it first"
         )
     strangers = sorted(
-        {str(t.get("author")) for t in tweets if str(t.get("author") or "").casefold() != screen_name}
+        {str(t.get("author")) for t in tweets if str(t.get("author") or "").casefold() != key.screen_name}
     )
     if strangers:
         raise ValueError(
-            f"tweets by {strangers} do not belong to voice {screen_name!r}"
+            f"tweets by {strangers} do not belong to voice {key.screen_name!r}"
         )
     rows = normalize_own_posts(
         session,

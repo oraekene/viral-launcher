@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from launcher.outcomes import StagedOutcomeSource
 from launcher.predictor import FEATURE_NAMES
-from launcher.relay import bind_voice, normalize_own_posts, relay_sync, resolve_project
+from launcher.relay import VoiceKey, bind_voice, engagement_value, normalize_own_posts, relay_sync, resolve_project
 from launcher.seed import seed_all
 
 
@@ -70,6 +70,24 @@ def test_normalize_replies_outweigh_likes(seeded: Session) -> None:
     assert chatty[0].z60 > chatty[1].z60
 
 
+def test_z60_is_log_multiple_of_median(seeded: Session) -> None:
+    import math
+
+    rows = normalize_own_posts(
+        seeded, "voice-a", [_tweet(0, CLEAN, likes=10), _tweet(1, CLEAN, likes=50)]
+    )
+    assert rows[0].z60 == pytest.approx(math.log(5.0 / 15.0), abs=1e-3)
+    assert rows[1].z60 == pytest.approx(math.log(25.0 / 15.0), abs=1e-3)
+
+
+def test_small_variance_stays_compressed(seeded: Session) -> None:
+    rows = normalize_own_posts(
+        seeded, "voice-a", [_tweet(0, CLEAN, likes=10), _tweet(1, CLEAN, likes=12)]
+    )
+    assert all(r.z60 < 2.5 for r in rows)
+    assert [r.value_flag for r in rows] == [False, False]
+
+
 def test_normalize_rejects_empty_and_malformed(seeded: Session) -> None:
     with pytest.raises(ValueError):
         normalize_own_posts(seeded, "voice-a", [])
@@ -80,18 +98,18 @@ def test_normalize_rejects_empty_and_malformed(seeded: Session) -> None:
 
 
 def test_voice_binding_roundtrip_and_rebind(seeded: Session) -> None:
-    assert resolve_project(seeded, "user-1", "ascully789") is None
-    bind_voice(seeded, "user-1", "ascully789", "voice-a")
-    assert resolve_project(seeded, "user-1", "ascully789") == "voice-a"
-    bind_voice(seeded, "user-1", "ascully789", "voice-b")
-    assert resolve_project(seeded, "user-1", "ascully789") == "voice-b"
+    assert resolve_project(seeded, VoiceKey("user-1", "ascully789")) is None
+    bind_voice(seeded, VoiceKey("user-1", "ascully789"), "voice-a")
+    assert resolve_project(seeded, VoiceKey("user-1", "ascully789")) == "voice-a"
+    bind_voice(seeded, VoiceKey("user-1", "ascully789"), "voice-b")
+    assert resolve_project(seeded, VoiceKey("user-1", "ascully789")) == "voice-b"
 
 
 def test_relay_sync_stages_and_runs_calibration(seeded: Session) -> None:
-    bind_voice(seeded, "user-1", "ascully789", "voice-a")
+    bind_voice(seeded, VoiceKey("user-1", "ascully789"), "voice-a")
     tweets = [_tweet(i, CLEAN) for i in range(9)]
     tweets += [_tweet(9 + i, CLEAN, likes=200, reposts=5, replies=10) for i in range(3)]
-    result = relay_sync(seeded, "user-1", "ascully789", tweets)
+    result = relay_sync(seeded, VoiceKey("user-1", "ascully789"), tweets)
     assert result.project_id == "voice-a"
     assert result.staged == 12
     assert len(StagedOutcomeSource(seeded).load_outcomes("voice-a")) == 12
@@ -101,10 +119,10 @@ def test_relay_sync_stages_and_runs_calibration(seeded: Session) -> None:
 
 
 def test_relay_sync_calibrates_on_evidence(seeded: Session) -> None:
-    bind_voice(seeded, "user-1", "ascully789", "voice-a")
+    bind_voice(seeded, VoiceKey("user-1", "ascully789"), "voice-a")
     tweets = [_tweet(i, CLEAN) for i in range(90)]
     tweets += [_tweet(90 + i, CLEAN, likes=200, reposts=5, replies=10) for i in range(30)]
-    result = relay_sync(seeded, "user-1", "ascully789", tweets)
+    result = relay_sync(seeded, VoiceKey("user-1", "ascully789"), tweets)
     assert result.staged == 120
     assert result.report.calibrated is True
     assert result.report.winner_share == pytest.approx(0.25)
@@ -112,26 +130,43 @@ def test_relay_sync_calibrates_on_evidence(seeded: Session) -> None:
 
 def test_relay_sync_without_binding_raises(seeded: Session) -> None:
     with pytest.raises(ValueError, match="no voice binding"):
-        relay_sync(seeded, "user-1", "ascully789", [_tweet(0, CLEAN)])
+        relay_sync(seeded, VoiceKey("user-1", "ascully789"), [_tweet(0, CLEAN)])
 
 
 def test_relay_sync_rejects_foreign_author(seeded: Session) -> None:
-    bind_voice(seeded, "user-1", "ascully789", "voice-a")
+    bind_voice(seeded, VoiceKey("user-1", "ascully789"), "voice-a")
     foreign = _tweet(0, CLEAN)
     foreign["author"] = "someone-else"
     with pytest.raises(ValueError, match="do not belong to voice"):
-        relay_sync(seeded, "user-1", "ascully789", [foreign])
+        relay_sync(seeded, VoiceKey("user-1", "ascully789"), [foreign])
 
 
 def test_bind_refuses_project_owned_by_another_voice(seeded: Session) -> None:
-    bind_voice(seeded, "user-1", "ascully789", "voice-a")
+    bind_voice(seeded, VoiceKey("user-1", "ascully789"), "voice-a")
     with pytest.raises(ValueError, match="already belongs to"):
-        bind_voice(seeded, "user-1", "oraekene1", "voice-a")
+        bind_voice(seeded, VoiceKey("user-1", "oraekene1"), "voice-a")
+
+
+def test_repeat_ids_stage_once(seeded: Session) -> None:
+    bind_voice(seeded, VoiceKey("user-1", "ascully789"), "voice-a")
+    tweets = [_tweet(0, CLEAN), _tweet(0, CLEAN), _tweet(1, CLEAN)]
+    result = relay_sync(seeded, VoiceKey("user-1", "ascully789"), tweets)
+    assert result.staged == 2
+
+
+def test_quote_counts_price_when_present(seeded: Session) -> None:
+    from launcher.params import ParamStore
+
+    store = ParamStore(seeded)
+    plain = _tweet(0, CLEAN, likes=10)
+    quoted = _tweet(1, CLEAN, likes=10)
+    quoted["quote_count"] = 4
+    assert engagement_value(quoted, store) == engagement_value(plain, store) + 4 * store.get_float("weight.quote")
 
 
 def test_handles_match_case_insensitively(seeded: Session) -> None:
-    bind_voice(seeded, "user-1", "AsCully789", "voice-a")
-    assert resolve_project(seeded, "user-1", "ascully789") == "voice-a"
-    result = relay_sync(seeded, "user-1", "ASCULLY789", [_tweet(0, CLEAN)])
+    bind_voice(seeded, VoiceKey("user-1", "AsCully789"), "voice-a")
+    assert resolve_project(seeded, VoiceKey("user-1", "ascully789")) == "voice-a"
+    result = relay_sync(seeded, VoiceKey("user-1", "ASCULLY789"), [_tweet(0, CLEAN)])
     assert result.project_id == "voice-a"
     assert result.staged == 1
