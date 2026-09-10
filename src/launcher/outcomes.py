@@ -190,6 +190,19 @@ def outcome_source(
     raise ValueError(f"unknown outcome source {source!r}")
 
 
+def project_floor(session: Session, project_id: str) -> float | None:
+    """Absolute engagement floor for one voice (#12, Hasan-style).
+
+    Below this raw weighted engagement no multiple counts, however
+    large the ratio. NULL means unset: no floor until the voice
+    declares one (no global bar per P-002).
+    """
+    from launcher.models import VoiceBinding
+
+    binding = session.query(VoiceBinding).filter_by(project_id=project_id).one_or_none()
+    return binding.viral_floor if binding is not None else None
+
+
 def stage_radar_outcomes(
     session: Session,
     project_id: str,

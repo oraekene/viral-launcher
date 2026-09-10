@@ -170,3 +170,24 @@ def test_handles_match_case_insensitively(seeded: Session) -> None:
     result = relay_sync(seeded, VoiceKey("user-1", "ASCULLY789"), [_tweet(0, CLEAN)])
     assert result.project_id == "voice-a"
     assert result.staged == 1
+
+
+def test_floor_blocks_sub_floor_peaks(seeded: Session) -> None:
+    bind_voice(seeded, VoiceKey("user-1", "ascully789"), "voice-a", viral_floor=200.0)
+    tweets = [_tweet(0, CLEAN), _tweet(1, CLEAN), _tweet(2, CLEAN)]
+    tweets.append(_tweet(3, CLEAN, likes=200, reposts=5, replies=10))
+    rows = normalize_own_posts(seeded, "voice-a", tweets)
+    assert [r.value_flag for r in rows] == [False, False, False, False]
+
+
+def test_floor_passes_above_floor_hits(seeded: Session) -> None:
+    bind_voice(seeded, VoiceKey("user-1", "ascully789"), "voice-a", viral_floor=100.0)
+    tweets = [_tweet(0, CLEAN), _tweet(1, CLEAN), _tweet(2, CLEAN)]
+    tweets.append(_tweet(3, CLEAN, likes=200, reposts=5, replies=10))
+    rows = normalize_own_posts(seeded, "voice-a", tweets)
+    assert [r.value_flag for r in rows] == [False, False, False, True]
+
+
+def test_negative_floor_rejected(seeded: Session) -> None:
+    with pytest.raises(ValueError, match="cannot be negative"):
+        bind_voice(seeded, VoiceKey("user-1", "ascully789"), "voice-a", viral_floor=-1.0)

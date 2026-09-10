@@ -321,7 +321,7 @@ def test_voices_bind_list_and_rebind(client: TestClient) -> None:
     assert created.status_code == 201
     listed = client.get("/voices", params={"worker_user_id": "user-1"}).json()
     assert listed == [
-        {"worker_user_id": "user-1", "screen_name": "ascully789", "project_id": "voice-a"}
+        {"worker_user_id": "user-1", "screen_name": "ascully789", "project_id": "voice-a", "viral_floor": None}
     ]
     client.post(
         "/voices",

@@ -149,6 +149,7 @@ class VoiceBinding(Base):
     worker_user_id: Mapped[str] = mapped_column(String(64))
     screen_name: Mapped[str] = mapped_column(String(64))
     project_id: Mapped[str] = mapped_column(String(64), index=True)
+    viral_floor: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 

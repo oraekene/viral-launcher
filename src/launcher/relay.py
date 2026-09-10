@@ -29,7 +29,7 @@ from launcher.calibration import CalibrationReport, run_calibration
 from launcher.features import extract
 from launcher.gate import load_engine
 from launcher.models import VoiceBinding
-from launcher.outcomes import OutcomeRow, StagedOutcomeSource, stage_radar_outcomes
+from launcher.outcomes import OutcomeRow, StagedOutcomeSource, project_floor, stage_radar_outcomes
 from launcher.params import ParamStore
 from launcher.predictor import active_model, feature_values
 from launcher.similarity import max_swatch_similarity
@@ -148,28 +148,35 @@ def normalize_own_posts(
             (feature_values(features, max_swatch_similarity(session, project_id, text)), vetoes)
         )
     baseline = statistics.median(values)
+    floor = project_floor(session, project_id)
     rows: list[OutcomeRow] = []
     for (vector, vetoes), value in zip(prepared, values):
         z60 = round(math.log(value / baseline), 4) if value > 0 and baseline > 0 else 0.0
+        flagged = z60 >= threshold and (floor is None or value >= floor)
         rows.append(
             OutcomeRow(
                 features=vector,
                 z60=z60,
-                value_flag=z60 >= threshold,
+                value_flag=flagged,
                 fired_vetoes=vetoes,
             )
         )
     return rows
 
 
-def bind_voice(session: Session, key: VoiceKey, project_id: str) -> VoiceBinding:
+def bind_voice(
+    session: Session, key: VoiceKey, project_id: str, *, viral_floor: float | None = None
+) -> VoiceBinding:
     """Bind (or rebind) a Worker user + account to a launcher project.
 
     Voice to project stays 1:1 both ways (ADR-0001): a project already
     bound to another voice refuses the bind instead of silently merging.
+    A viral floor rides along when given (#12); None leaves it unset.
     """
     if not project_id.strip():
         raise ValueError("project_id is required")
+    if viral_floor is not None and viral_floor < 0:
+        raise ValueError("viral_floor cannot be negative")
     taken = (
         session.query(VoiceBinding)
         .filter(
@@ -190,10 +197,13 @@ def bind_voice(session: Session, key: VoiceKey, project_id: str) -> VoiceBinding
             worker_user_id=key.worker_user_id,
             screen_name=key.screen_name,
             project_id=project_id,
+            viral_floor=viral_floor,
         )
         session.add(row)
     else:
         row.project_id = project_id
+        if viral_floor is not None:
+            row.viral_floor = viral_floor
     session.flush()
     return row
 
