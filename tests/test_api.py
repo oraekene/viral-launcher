@@ -148,7 +148,7 @@ def test_rewrite_excludes_vetoed_variants() -> None:
 
 
 def test_per_draft_cap_blocks_second_paid_rewrite_with_402() -> None:
-    client = _make_client(StaticPaidProvider(usd=0.06))
+    client = _make_client(StaticPaidProvider(usd=0.60))
     created = client.post("/drafts", json={"text": CLEAN_DRAFT}).json()
     first = client.post(f"/drafts/{created['id']}/rewrite", json={"n": 2})
     assert first.status_code == 200
@@ -212,7 +212,7 @@ def test_top3_includes_gate_verdicts(client: TestClient) -> None:
 
 
 def test_batch_continues_past_budget_block() -> None:
-    client = _make_client(StaticPaidProvider(usd=0.50))
+    client = _make_client(StaticPaidProvider(usd=1.50))
     resp = client.post(
         "/drafts/batch",
         json={

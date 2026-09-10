@@ -32,7 +32,7 @@ B (radar outcome staging), and C (account labels).
   rehearse without persisting.
 - **Swipe file** — archive launched posts as format swatches; similarity to
   archived winners feeds the score.
-- **Cost metering** — per-draft budget cap (default $0.10) enforced on
+- **Cost metering** — per-draft budget cap (default $1) enforced on
   *projected* spend before any paid call; all spend lands in one ledger.
 
 Constants live in `param_versions` with `sourced` / `assumed` / `pending` /

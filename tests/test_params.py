@@ -62,3 +62,21 @@ def test_unknown_key_raises(seeded: Session) -> None:
     store = ParamStore(seeded)
     with pytest.raises(KeyError):
         store.get("nope.does_not_exist")
+
+
+def test_per_draft_cap_bump_migrates_old_default_only(seeded: Session) -> None:
+    from launcher.models import ParamVersion
+
+    row = seeded.query(ParamVersion).filter_by(key="cost.per_draft_cap_usd").one()
+    assert row.value == 1.00  # fresh seeds get the Q9 default
+    row.value = 0.10
+    seeded.commit()
+    seed_params(seeded)
+    seeded.commit()
+    assert ParamStore(seeded).get_float("cost.per_draft_cap_usd") == 1.00
+    row = seeded.query(ParamVersion).filter_by(key="cost.per_draft_cap_usd").one()
+    row.value = 2.50  # operator-customized value stays untouched
+    seeded.commit()
+    seed_params(seeded)
+    seeded.commit()
+    assert ParamStore(seeded).get_float("cost.per_draft_cap_usd") == 2.50

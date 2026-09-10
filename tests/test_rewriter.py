@@ -120,7 +120,7 @@ def test_flow_records_cost_event(seeded: Session) -> None:
 
 
 def test_per_draft_cap_blocks_repeat_paid_rewrite(seeded: Session) -> None:
-    provider = FakeProvider(["A variant."], usd=0.06)
+    provider = FakeProvider(["A variant."], usd=0.60)
     draft = seeded.query(Draft).one()
     rewrite_flow(seeded, draft.id, provider, n=1)
     with pytest.raises(BudgetExceeded):
@@ -251,7 +251,7 @@ def test_try_rewrite_returns_result_on_success(seeded: Session) -> None:
 
 
 def test_try_rewrite_captures_budget_as_error(seeded: Session) -> None:
-    provider = FakeProvider(["A variant."], usd=0.50)
+    provider = FakeProvider(["A variant."], usd=1.50)
     draft = seeded.query(Draft).one()
     attempt = try_rewrite_flow(seeded, draft.id, provider, n=1)
     assert attempt.result is None

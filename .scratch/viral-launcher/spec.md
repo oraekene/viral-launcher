@@ -78,7 +78,7 @@ Honest limits are encoded as first-class constraints: the system optimizes *elic
 
 ### Cost model
 
-- Gate: $0 (deterministic). Predictor inference: ~$0. Rewriter: LLM tokens per variant × N variants, metered per draft with a configurable cap (default $0.10/draft). Post-publish snapshots ride the existing own-account read budget. No new subscriptions.
+- Gate: $0 (deterministic). Predictor inference: ~$0. Rewriter: LLM tokens per variant × N variants, metered per draft with a configurable cap (default $1/draft). Post-publish snapshots ride the existing own-account read budget. No new subscriptions.
 
 ### Platform scope
 

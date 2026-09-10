@@ -88,7 +88,7 @@ PARAM_SEED: tuple[ParamSpec, ...] = (
     ParamSpec("rewriter.default_n", 10.0, "pending", "spec default; tune after usage"),
     ParamSpec(
         "cost.per_draft_cap_usd",
-        0.10,
+        1.00,
         "pending",
         "spec default per-draft rewrite budget cap",
     ),
@@ -117,7 +117,9 @@ class ParamValue:
 
 def seed_params(session: Session) -> None:
     """Insert missing params; refresh provenance notes on existing ones.
-    Value and status are operator/calibration state and never touched."""
+    Value and status are operator/calibration state and never touched,
+    except a one-time bump of untouched cost.per_draft_cap_usd rows
+    from the old 0.10 default to the Q9 1.00 default."""
     existing = {row.key: row for row in session.query(ParamVersion).all()}
     for spec in PARAM_SEED:
         row = existing.get(spec.key)
@@ -130,8 +132,16 @@ def seed_params(session: Session) -> None:
                     source_note=spec.source_note,
                 )
             )
-        elif row.source_note != spec.source_note:
-            row.source_note = spec.source_note
+        else:
+            if (
+                spec.key == "cost.per_draft_cap_usd"
+                and row.status == "pending"
+                and abs(row.value - 0.10) < 1e-9
+            ):
+                # ponytail: one-time default bump 0.10 -> 1.00 per Q9; customized values untouched
+                row.value = spec.value
+            if row.source_note != spec.source_note:
+                row.source_note = spec.source_note
 
 
 class ParamStore:

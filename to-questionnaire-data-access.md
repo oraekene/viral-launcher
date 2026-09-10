@@ -126,7 +126,7 @@ List 1-3 names (for example: "AI tools", "indie hacking", "my newsletter"):
 
 ### 9. How much can the app spend to rewrite one draft?
 
-Current setting is $0.10. Is that okay, or do you want it higher or lower?
+Current setting is $1.00. Is that okay, or do you want it higher or lower?
 
 >
 
