@@ -59,7 +59,8 @@ PARAM_SEED: tuple[ParamSpec, ...] = (
         "half_life.minutes",
         80.0,
         "sourced",
-        "arXiv:2302.09654 median tweet half-life (~80 minutes)",
+        "arXiv:2302.09654 median tweet half-life 79.5 min (~80); "
+        "excerpt vendored in docs/sources/2302.09654-half-life-excerpt.md",
     ),
     ParamSpec(
         "limit.standard_chars",

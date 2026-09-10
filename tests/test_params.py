@@ -52,10 +52,16 @@ def test_calibration_params_are_pending(seeded: Session) -> None:
 
 
 def test_half_life_param_sourced_from_research(seeded: Session) -> None:
+    from pathlib import Path
+
     store = ParamStore(seeded)
     pv = store.get("half_life.minutes")
     assert pv.value == 80.0
     assert "arXiv" in pv.source_note
+    assert "docs/sources/2302.09654-half-life-excerpt.md" in pv.source_note
+    excerpt = Path(__file__).resolve().parent.parent / "docs/sources/2302.09654-half-life-excerpt.md"
+    assert excerpt.is_file()
+    assert "79.5" in excerpt.read_text(encoding="utf-8")
 
 
 def test_unknown_key_raises(seeded: Session) -> None:
