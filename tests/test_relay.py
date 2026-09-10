@@ -113,3 +113,25 @@ def test_relay_sync_calibrates_on_evidence(seeded: Session) -> None:
 def test_relay_sync_without_binding_raises(seeded: Session) -> None:
     with pytest.raises(ValueError, match="no voice binding"):
         relay_sync(seeded, "user-1", "ascully789", [_tweet(0, CLEAN)])
+
+
+def test_relay_sync_rejects_foreign_author(seeded: Session) -> None:
+    bind_voice(seeded, "user-1", "ascully789", "voice-a")
+    foreign = _tweet(0, CLEAN)
+    foreign["author"] = "someone-else"
+    with pytest.raises(ValueError, match="do not belong to voice"):
+        relay_sync(seeded, "user-1", "ascully789", [foreign])
+
+
+def test_bind_refuses_project_owned_by_another_voice(seeded: Session) -> None:
+    bind_voice(seeded, "user-1", "ascully789", "voice-a")
+    with pytest.raises(ValueError, match="already belongs to"):
+        bind_voice(seeded, "user-1", "oraekene1", "voice-a")
+
+
+def test_handles_match_case_insensitively(seeded: Session) -> None:
+    bind_voice(seeded, "user-1", "AsCully789", "voice-a")
+    assert resolve_project(seeded, "user-1", "ascully789") == "voice-a"
+    result = relay_sync(seeded, "user-1", "ASCULLY789", [_tweet(0, CLEAN)])
+    assert result.project_id == "voice-a"
+    assert result.staged == 1

@@ -305,6 +305,7 @@ def test_scheduling_beyond_48h_warns(client: TestClient) -> None:
 def _relay_tweet(i: int, **counts: int) -> dict[str, object]:
     return {
         "id": str(2000 + i),
+        "author": "ascully789",
         "text": CLEAN_DRAFT,
         "favorite_count": counts.get("likes", 10),
         "retweet_count": counts.get("reposts", 0),

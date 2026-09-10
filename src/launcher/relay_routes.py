@@ -26,6 +26,7 @@ class VoiceOut(BaseModel):
 
 class RelayTweetIn(BaseModel):
     id: str
+    author: str
     text: str
     favorite_count: int
     retweet_count: int

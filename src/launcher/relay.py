@@ -57,6 +57,20 @@ def engagement_value(tweet: dict[str, Any], store: ParamStore) -> float:
     )
 
 
+def _voice_row(
+    session: Session, worker_user_id: str, screen_name: str
+) -> VoiceBinding | None:
+    return (
+        session.query(VoiceBinding)
+        .filter_by(worker_user_id=worker_user_id, screen_name=screen_name)
+        .one_or_none()
+    )
+
+
+def _normalize_handle(screen_name: str) -> str:
+    return screen_name.strip().casefold()
+
+
 def _flag_threshold(session: Session, project_id: str) -> float:
     """Value-flag bar: the voice's calibrated trigger when fitted,
     else the house default. Per-voice override lands in #3."""
@@ -121,14 +135,29 @@ def normalize_own_posts(
 def bind_voice(
     session: Session, worker_user_id: str, screen_name: str, project_id: str
 ) -> VoiceBinding:
-    """Bind (or rebind) a Worker user + account to a launcher project."""
-    if not worker_user_id.strip() or not screen_name.strip() or not project_id.strip():
+    """Bind (or rebind) a Worker user + account to a launcher project.
+
+    Voice to project stays 1:1 both ways (ADR-0001): a project already
+    bound to another voice refuses the bind instead of silently merging.
+    """
+    screen_name = _normalize_handle(screen_name)
+    if not worker_user_id.strip() or not screen_name or not project_id.strip():
         raise ValueError("worker_user_id, screen_name, and project_id are all required")
-    row = (
+    taken = (
         session.query(VoiceBinding)
-        .filter_by(worker_user_id=worker_user_id, screen_name=screen_name)
+        .filter(
+            VoiceBinding.project_id == project_id,
+            (VoiceBinding.worker_user_id != worker_user_id)
+            | (VoiceBinding.screen_name != screen_name),
+        )
         .one_or_none()
     )
+    if taken is not None:
+        raise ValueError(
+            f"project {project_id!r} already belongs to "
+            f"user {taken.worker_user_id!r} account {taken.screen_name!r}"
+        )
+    row = _voice_row(session, worker_user_id, screen_name)
     if row is None:
         row = VoiceBinding(
             worker_user_id=worker_user_id,
@@ -146,11 +175,7 @@ def resolve_project(
     session: Session, worker_user_id: str, screen_name: str
 ) -> str | None:
     """The launcher project bound to a Worker user + account, if any."""
-    row = (
-        session.query(VoiceBinding)
-        .filter_by(worker_user_id=worker_user_id, screen_name=screen_name)
-        .one_or_none()
-    )
+    row = _voice_row(session, worker_user_id, _normalize_handle(screen_name))
     return row.project_id if row is not None else None
 
 
@@ -171,11 +196,19 @@ def relay_sync(
     mutuals_count: int | None = None,
 ) -> RelaySyncResult:
     """Full adapter loop: resolve voice, normalize, stage, calibrate."""
+    screen_name = _normalize_handle(screen_name)
     project_id = resolve_project(session, worker_user_id, screen_name)
     if project_id is None:
         raise ValueError(
             f"no voice binding for user {worker_user_id!r} "
             f"account {screen_name!r}; bind it first"
+        )
+    strangers = sorted(
+        {str(t.get("author")) for t in tweets if str(t.get("author") or "").casefold() != screen_name}
+    )
+    if strangers:
+        raise ValueError(
+            f"tweets by {strangers} do not belong to voice {screen_name!r}"
         )
     rows = normalize_own_posts(
         session,
