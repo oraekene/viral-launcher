@@ -85,6 +85,23 @@ GET  /params                    constants with provenance
 Environment: `LAUNCHER_DATABASE_URL` (default `sqlite:///./launcher.db`),
 `LAUNCHER_LLM_API_KEY`, `LAUNCHER_LLM_BASE_URL`, `LAUNCHER_LLM_MODEL`.
 
+## Multi-user tenancy (#5)
+
+Single-operator use needs nothing: with zero tenant tokens the API stays
+open exactly as before. To share one service between untrusted users:
+
+```
+launcher tenant-token user-a        # -> bearer token, shown once
+```
+
+Callers send `Authorization: Bearer <token>`; projects are owned through
+`/voices` bindings, drafts inherit ownership through their project, costs
+and labels are filtered per tenant, and shared constants (`/params`,
+`/rules`) stay readable to all authenticated callers. Cross-tenant reads
+return 404, owner mismatch returns 403, missing/invalid tokens return 401.
+Physical per-tenant database files remain future work; isolation today is
+row-level ownership on shared storage.
+
 ## Development
 
 ```

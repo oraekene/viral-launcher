@@ -15,6 +15,8 @@ from launcher.gate import load_engine
 from launcher.labels import label_warnings
 from launcher.models import CostEvent, Draft, DraftVariant
 from launcher.rewriter import RewriteResult, VariantProvider, rewrite_flow, try_rewrite_flow
+from launcher.tenancy import TenantId, require_draft, require_project
+from launcher.tenancy import tenant_dep as make_tenant_dep
 
 
 class DraftIn(BaseModel):
@@ -138,13 +140,20 @@ def _rewrite_out(result: RewriteResult) -> RewriteOut:
 def build_drafts_router(
     get_session: Callable[[], Iterator[Session]],
     get_provider: Callable[..., VariantProvider],
+    get_tenant: Callable[[], TenantId] | None = None,
 ) -> APIRouter:
     router = APIRouter()
+    tenant_dep = make_tenant_dep(get_tenant)
 
     @router.post("/drafts", status_code=201, response_model=DraftOut)
     def create_draft(
-        data: DraftIn, session: Session = Depends(get_session)
+        data: DraftIn,
+        session: Session = Depends(get_session),
+        tenant: TenantId = Depends(tenant_dep),
     ) -> DraftOut:
+        if tenant is not None and data.project_id is None:
+            raise HTTPException(status_code=422, detail="project_id is required")
+        require_project(session, tenant, data.project_id)
         engine = load_engine(session)
         features = extract(
             data.text,
@@ -166,14 +175,16 @@ def build_drafts_router(
         )
         session.add(draft)
         session.flush()
-        return _draft_out(draft, label_warnings(session))
+        return _draft_out(draft, label_warnings(session, tenant))
 
     @router.get("/drafts/{draft_id}", response_model=DraftOut)
-    def get_draft(draft_id: int, session: Session = Depends(get_session)) -> DraftOut:
-        draft = session.get(Draft, draft_id)
-        if draft is None:
-            raise HTTPException(status_code=404, detail="draft not found")
-        return _draft_out(draft, label_warnings(session))
+    def get_draft(
+        draft_id: int,
+        session: Session = Depends(get_session),
+        tenant: TenantId = Depends(tenant_dep),
+    ) -> DraftOut:
+        draft = require_draft(session, tenant, draft_id)
+        return _draft_out(draft, label_warnings(session, tenant))
 
     @router.post("/drafts/{draft_id}/rewrite", response_model=RewriteOut)
     def rewrite_draft(
@@ -181,7 +192,9 @@ def build_drafts_router(
         data: RewriteIn,
         session: Session = Depends(get_session),
         variant_provider: VariantProvider = Depends(get_provider),
+        tenant: TenantId = Depends(tenant_dep),
     ) -> RewriteOut:
+        require_draft(session, tenant, draft_id)
         try:
             result = rewrite_flow(session, draft_id, variant_provider, n=data.n)
         except BudgetExceeded as exc:
@@ -192,10 +205,11 @@ def build_drafts_router(
 
     @router.get("/drafts/{draft_id}/variants", response_model=list[VariantRowOut])
     def list_variants(
-        draft_id: int, session: Session = Depends(get_session)
+        draft_id: int,
+        session: Session = Depends(get_session),
+        tenant: TenantId = Depends(tenant_dep),
     ) -> list[VariantRowOut]:
-        if session.get(Draft, draft_id) is None:
-            raise HTTPException(status_code=404, detail="draft not found")
+        require_draft(session, tenant, draft_id)
         rows = (
             session.query(DraftVariant)
             .filter_by(draft_id=draft_id)
@@ -217,10 +231,11 @@ def build_drafts_router(
 
     @router.get("/drafts/{draft_id}/costs", response_model=list[CostEventOut])
     def list_draft_costs(
-        draft_id: int, session: Session = Depends(get_session)
+        draft_id: int,
+        session: Session = Depends(get_session),
+        tenant: TenantId = Depends(tenant_dep),
     ) -> list[CostEventOut]:
-        if session.get(Draft, draft_id) is None:
-            raise HTTPException(status_code=404, detail="draft not found")
+        require_draft(session, tenant, draft_id)
         events = (
             session.query(CostEvent).filter_by(draft_id=draft_id).order_by(CostEvent.id).all()
         )
@@ -237,11 +252,13 @@ def build_drafts_router(
 
     @router.post("/drafts/batch", response_model=BatchOut)
     def batch_drafts(
-        data: BatchIn, session: Session = Depends(get_session)
+        data: BatchIn,
+        session: Session = Depends(get_session),
+        tenant: TenantId = Depends(tenant_dep),
     ) -> BatchOut:
         results: list[BatchResultOut] = []
         for item in data.items:
-            draft_out = create_draft(item, session)
+            draft_out = create_draft(item, session, tenant)
             rewrite_out: RewriteOut | None = None
             if data.rewrite:
                 attempt = try_rewrite_flow(
@@ -262,7 +279,12 @@ def build_drafts_router(
         return BatchOut(results=results)
 
     @router.post("/drafts/{draft_id}/score", response_model=ScoreOut)
-    def score_draft(draft_id: int, session: Session = Depends(get_session)) -> ScoreOut:
+    def score_draft(
+        draft_id: int,
+        session: Session = Depends(get_session),
+        tenant: TenantId = Depends(tenant_dep),
+    ) -> ScoreOut:
+        require_draft(session, tenant, draft_id)
         try:
             result = score_draft_service(session, draft_id)
         except ValueError as exc:

@@ -12,6 +12,8 @@ from launcher.calibration import CalibrationReport, run_calibration
 from launcher.models import ParamVersion, PredictorModel
 from launcher.outcomes import outcome_source
 from launcher.predictor import active_model, train_predictor
+from launcher.tenancy import TenantId, require_project, tenant_projects
+from launcher.tenancy import tenant_dep as make_tenant_dep
 
 
 class TrainIn(BaseModel):
@@ -108,13 +110,18 @@ def calibration_report_out(report: CalibrationReport) -> CalibrationReportOut:
 
 def build_models_router(
     get_session: Callable[[], Iterator[Session]],
+    get_tenant: Callable[[], TenantId] | None = None,
 ) -> APIRouter:
     router = APIRouter()
+    tenant_dep = make_tenant_dep(get_tenant)
 
     @router.post("/models/train", status_code=201, response_model=ModelOut)
     def train_model(
-        data: TrainIn, session: Session = Depends(get_session)
+        data: TrainIn,
+        session: Session = Depends(get_session),
+        tenant: TenantId = Depends(tenant_dep),
     ) -> ModelOut:
+        require_project(session, tenant, data.project_id)
         try:
             row = train_predictor(
                 session,
@@ -127,17 +134,26 @@ def build_models_router(
 
     @router.get("/models", response_model=list[ModelOut])
     def list_models(
-        project_id: str | None = None, session: Session = Depends(get_session)
+        project_id: str | None = None,
+        session: Session = Depends(get_session),
+        tenant: TenantId = Depends(tenant_dep),
     ) -> list[ModelOut]:
+        if project_id is not None:
+            require_project(session, tenant, project_id)
         query = session.query(PredictorModel).order_by(PredictorModel.id.desc())
         if project_id is not None:
             query = query.filter_by(project_id=project_id)
+        elif tenant is not None:
+            query = query.filter(PredictorModel.project_id.in_(tenant_projects(session, tenant)))
         return [_model_out(m) for m in query.limit(100).all()]
 
     @router.post("/calibration/run", response_model=CalibrationReportOut)
     def run_calibration_endpoint(
-        data: CalibrationIn, session: Session = Depends(get_session)
+        data: CalibrationIn,
+        session: Session = Depends(get_session),
+        tenant: TenantId = Depends(tenant_dep),
     ) -> CalibrationReportOut:
+        require_project(session, tenant, data.project_id)
         try:
             report = run_calibration(
                 session,
@@ -155,8 +171,11 @@ def build_models_router(
 
     @router.get("/calibration/status", response_model=CalibrationStatusOut)
     def calibration_status(
-        project_id: str, session: Session = Depends(get_session)
+        project_id: str,
+        session: Session = Depends(get_session),
+        tenant: TenantId = Depends(tenant_dep),
     ) -> CalibrationStatusOut:
+        require_project(session, tenant, project_id)
         keys = ("z.trigger", "band.interim_width")
         rows = (
             session.query(ParamVersion)

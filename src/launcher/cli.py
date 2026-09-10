@@ -169,6 +169,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_sync.add_argument("path", help="JSON file: worker_user_id, screen_name, tweets")
 
+    p_token = sub.add_parser(
+        "tenant-token", help="issue a bearer token for a tenant (#5)"
+    )
+    p_token.add_argument("worker_user_id", help="Worker user id owning the token")
+
     args = parser.parse_args(argv)
     settings = Settings.from_env()
 
@@ -191,6 +196,15 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "relay-sync":
         print(json.dumps(_relay_sync_payload(settings, args), indent=2))
+        return 0
+
+    if args.command == "tenant-token":
+        from launcher.tenancy import issue_token
+
+        with session_scope(settings) as session:
+            token = issue_token(session, args.worker_user_id)
+            session.commit()
+        print(json.dumps({"worker_user_id": args.worker_user_id, "token": token}))
         return 0
 
     if args.command == "serve":

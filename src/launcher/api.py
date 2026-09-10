@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import AsyncIterator
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -17,6 +17,7 @@ from launcher.launches_routes import build_launches_router
 from launcher.models import (
     AccountLabel,
     CostEvent,
+    Draft,
     GateRule,
     ParamVersion,
     Swatch,
@@ -31,6 +32,7 @@ from launcher.rewriter import (
 from launcher.seed import seed_all
 from launcher.outcomes import stage_radar_outcomes
 from launcher.swipes import archive_swatch, list_swatches
+from launcher.tenancy import TenantId, require_draft, require_project, resolve_tenant, tenant_projects
 
 
 class RuleOut(BaseModel):
@@ -129,15 +131,28 @@ def create_app(
             return provider
         return default_provider(resolved_settings, ParamStore(session))
 
+    def get_tenant(
+        session: Session = Depends(get_session),
+        authorization: str | None = Header(default=None),
+    ) -> TenantId:
+        return resolve_tenant(session, authorization)
+
     app.include_router(
-        build_drafts_router(get_session=get_session, get_provider=get_provider)
+        build_drafts_router(
+            get_session=get_session, get_provider=get_provider, get_tenant=get_tenant
+        )
     )
-    app.include_router(build_models_router(get_session=get_session))
-    app.include_router(build_relay_router(get_session=get_session))
-    app.include_router(build_launches_router(get_session=get_session))
+    app.include_router(build_models_router(get_session=get_session, get_tenant=get_tenant))
+    app.include_router(build_relay_router(get_session=get_session, get_tenant=get_tenant))
+    app.include_router(
+        build_launches_router(get_session=get_session, get_tenant=get_tenant)
+    )
 
     @app.get("/rules", response_model=list[RuleOut])
-    def list_rules(session: Session = Depends(get_session)) -> list[RuleOut]:
+    def list_rules(
+        session: Session = Depends(get_session),
+        tenant: TenantId = Depends(get_tenant),
+    ) -> list[RuleOut]:
         rules = session.query(GateRule).order_by(GateRule.position).all()
         return [
             RuleOut(
@@ -152,7 +167,15 @@ def create_app(
         ]
 
     @app.post("/rules/{rule_id}/toggle", response_model=RuleOut)
-    def toggle_rule(rule_id: int, session: Session = Depends(get_session)) -> RuleOut:
+    def toggle_rule(
+        rule_id: int,
+        session: Session = Depends(get_session),
+        tenant: TenantId = Depends(get_tenant),
+    ) -> RuleOut:
+        if tenant is not None:
+            raise HTTPException(
+                status_code=403, detail="shared rules are read-only in multi-user mode"
+            )
         rule = session.get(GateRule, rule_id)
         if rule is None:
             raise HTTPException(status_code=404, detail="rule not found")
@@ -167,7 +190,10 @@ def create_app(
         )
 
     @app.get("/params", response_model=list[ParamOut])
-    def list_params(session: Session = Depends(get_session)) -> list[ParamOut]:
+    def list_params(
+        session: Session = Depends(get_session),
+        tenant: TenantId = Depends(get_tenant),
+    ) -> list[ParamOut]:
         rows = session.query(ParamVersion).order_by(ParamVersion.key).all()
         return [
             ParamOut(
@@ -177,14 +203,28 @@ def create_app(
         ]
 
     @app.get("/costs", response_model=CostSummaryOut)
-    def cost_summary(session: Session = Depends(get_session)) -> CostSummaryOut:
-        events = session.query(CostEvent).all()
+    def cost_summary(
+        session: Session = Depends(get_session),
+        tenant: TenantId = Depends(get_tenant),
+    ) -> CostSummaryOut:
+        query = session.query(CostEvent)
+        if tenant is not None:
+            allowed = tenant_projects(session, tenant)
+            query = query.join(Draft, CostEvent.draft_id == Draft.id).filter(
+                Draft.project_id.in_(allowed)
+            )
+        events = query.all()
         return CostSummaryOut(
             total_usd=round(sum(e.usd for e in events), 6), events=len(events)
         )
 
     @app.post("/swatches", status_code=201, response_model=SwatchOut)
-    def create_swatch(data: SwatchIn, session: Session = Depends(get_session)) -> SwatchOut:
+    def create_swatch(
+        data: SwatchIn,
+        session: Session = Depends(get_session),
+        tenant: TenantId = Depends(get_tenant),
+    ) -> SwatchOut:
+        require_draft(session, tenant, data.draft_id)
         try:
             swatch = archive_swatch(session, data.draft_id, data.variant_id, data.actual_z)
         except ValueError as exc:
@@ -193,14 +233,25 @@ def create_app(
 
     @app.get("/swatches", response_model=list[SwatchOut])
     def get_swatches(
-        project_id: str | None = None, session: Session = Depends(get_session)
+        project_id: str | None = None,
+        session: Session = Depends(get_session),
+        tenant: TenantId = Depends(get_tenant),
     ) -> list[SwatchOut]:
-        return [_swatch_out(s) for s in list_swatches(session, project_id)]
+        if project_id is not None:
+            require_project(session, tenant, project_id)
+        rows = list_swatches(session, project_id)
+        if tenant is not None:
+            allowed = tenant_projects(session, tenant)
+            rows = [s for s in rows if s.project_id in allowed]
+        return [_swatch_out(s) for s in rows]
 
     @app.post("/outcomes/import", status_code=201)
     def import_outcomes(
-        data: ImportIn, session: Session = Depends(get_session)
+        data: ImportIn,
+        session: Session = Depends(get_session),
+        tenant: TenantId = Depends(get_tenant),
     ) -> dict[str, int]:
+        require_project(session, tenant, data.project_id)
         try:
             imported = stage_radar_outcomes(
                 session, data.project_id, [r.model_dump() for r in data.rows]
@@ -210,23 +261,26 @@ def create_app(
         return {"imported": imported}
 
     @app.post("/labels", status_code=201)
-    def create_label(data: LabelIn, session: Session = Depends(get_session)) -> LabelOut:
-        label = record_label(session, data.label_name, data.meaning, "manual")
+    def create_label(
+        data: LabelIn,
+        session: Session = Depends(get_session),
+        tenant: TenantId = Depends(get_tenant),
+    ) -> LabelOut:
+        label = record_label(session, data.label_name, data.meaning, "manual", tenant)
         return _label_out(label)
 
     @app.get("/labels", response_model=list[LabelOut])
     def get_labels(
-        fresh_only: bool = False, session: Session = Depends(get_session)
+        fresh_only: bool = False,
+        session: Session = Depends(get_session),
+        tenant: TenantId = Depends(get_tenant),
     ) -> list[LabelOut]:
         if fresh_only:
-            return [_label_out(l) for l in fresh_labels(session)]
-        rows = (
-            session.query(AccountLabel)
-            .order_by(AccountLabel.observed_at.desc())
-            .limit(500)
-            .all()
-        )
-        return [_label_out(l) for l in rows]
+            return [_label_out(l) for l in fresh_labels(session, tenant)]
+        query = session.query(AccountLabel).order_by(AccountLabel.observed_at.desc())
+        if tenant is not None:
+            query = query.filter_by(worker_user_id=tenant)
+        return [_label_out(l) for l in query.limit(500).all()]
 
     return app
 

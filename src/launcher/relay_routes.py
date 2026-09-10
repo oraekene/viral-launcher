@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 from launcher.models import VoiceBinding
 from launcher.models_routes import CalibrationReportOut, calibration_report_out
 from launcher.relay import VoiceKey, bind_voice, relay_sync
+from launcher.tenancy import TenantId, require_owner
+from launcher.tenancy import tenant_dep as make_tenant_dep
 
 
 class VoiceIn(BaseModel):
@@ -52,13 +54,18 @@ class RelaySyncOut(BaseModel):
 
 def build_relay_router(
     get_session: Callable[[], Iterator[Session]],
+    get_tenant: Callable[[], TenantId] | None = None,
 ) -> APIRouter:
     router = APIRouter()
+    tenant_dep = make_tenant_dep(get_tenant)
 
     @router.post("/voices", status_code=201, response_model=VoiceOut)
     def bind_voice_endpoint(
-        data: VoiceIn, session: Session = Depends(get_session)
+        data: VoiceIn,
+        session: Session = Depends(get_session),
+        tenant: TenantId = Depends(tenant_dep),
     ) -> VoiceOut:
+        require_owner(tenant, data.worker_user_id)
         try:
             row = bind_voice(
                 session,
@@ -79,8 +86,12 @@ def build_relay_router(
 
     @router.get("/voices", response_model=list[VoiceOut])
     def list_voices(
-        worker_user_id: str | None = None, session: Session = Depends(get_session)
+        worker_user_id: str | None = None,
+        session: Session = Depends(get_session),
+        tenant: TenantId = Depends(tenant_dep),
     ) -> list[VoiceOut]:
+        if tenant is not None:
+            worker_user_id = tenant
         query = session.query(VoiceBinding).order_by(VoiceBinding.id)
         if worker_user_id is not None:
             query = query.filter_by(worker_user_id=worker_user_id)
@@ -97,8 +108,11 @@ def build_relay_router(
 
     @router.post("/outcomes/relay-sync", status_code=201, response_model=RelaySyncOut)
     def relay_sync_endpoint(
-        data: RelaySyncIn, session: Session = Depends(get_session)
+        data: RelaySyncIn,
+        session: Session = Depends(get_session),
+        tenant: TenantId = Depends(tenant_dep),
     ) -> RelaySyncOut:
+        require_owner(tenant, data.worker_user_id)
         try:
             result = relay_sync(
                 session,

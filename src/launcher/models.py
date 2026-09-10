@@ -138,7 +138,8 @@ class VoiceBinding(Base):
 
     One row per owned voice: the Worker's user_id plus the account's
     screen_name resolve to the launcher project that voice calibrates.
-    Project ids stay opaque capability strings until tenancy lands (#5).
+    Unbound project ids stay opaque capability strings (UUIDs); bound
+    ones are enforced per tenant by the API layer (#5).
     """
 
     __tablename__ = "voice_bindings"
@@ -155,6 +156,22 @@ class VoiceBinding(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class TenantToken(Base):
+    """Bearer credential binding a caller to one Worker user (#5).
+
+    One row per issued token; a tenant may hold several (rotation).
+    Only the sha256 hash is stored — the plaintext is shown once at
+    issue time. No rows at all means single-operator open mode.
+    """
+
+    __tablename__ = "tenant_tokens"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    worker_user_id: Mapped[str] = mapped_column(String(64), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class AccountLabel(Base):
     __tablename__ = "account_labels"
 
@@ -162,6 +179,7 @@ class AccountLabel(Base):
     label_name: Mapped[str] = mapped_column(String(128))
     meaning: Mapped[str | None] = mapped_column(String(512), nullable=True)
     source: Mapped[str] = mapped_column(String(16), default="manual")
+    worker_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
