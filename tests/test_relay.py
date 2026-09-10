@@ -7,14 +7,6 @@ from launcher.models import RadarOutcomeStage
 from launcher.outcomes import StagedOutcomeSource
 from launcher.predictor import FEATURE_NAMES
 from launcher.relay import VoiceKey, bind_voice, engagement_value, normalize_own_posts, relay_sync, resolve_project
-from launcher.seed import seed_all
-
-
-@pytest.fixture()
-def seeded(session: Session) -> Session:
-    seed_all(session)
-    session.commit()
-    return session
 
 
 def _tweet(

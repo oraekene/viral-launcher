@@ -6,18 +6,8 @@ from sqlalchemy.orm import Session
 from launcher.features import extract
 from launcher.models import Draft, PredictorModel
 from launcher.outcomes import SyntheticOutcomeSource
-from launcher.params import seed_params
 from launcher.predictor import active_model, predict_z, train_predictor
 from launcher.rewriter import GenerationResult, HeuristicProvider, rewrite_flow
-from launcher.rules_seed import seed_rules
-
-
-@pytest.fixture()
-def seeded(session: Session) -> Session:
-    seed_params(session)
-    seed_rules(session)
-    session.commit()
-    return session
 
 
 def test_synthetic_source_honors_winner_share(seeded: Session) -> None:

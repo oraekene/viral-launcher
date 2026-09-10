@@ -13,17 +13,7 @@ from launcher.calibration import (
 )
 from launcher.models import Base, ParamVersion, PredictorModel
 from launcher.outcomes import OutcomeRow, StagedOutcomeSource, SyntheticOutcomeSource, stage_radar_outcomes
-from launcher.params import seed_params
 from launcher.predictor import train_predictor
-from launcher.rules_seed import seed_rules
-
-
-@pytest.fixture()
-def seeded(session: Session) -> Session:
-    seed_params(session)
-    seed_rules(session)
-    session.commit()
-    return session
 
 
 def test_refuses_to_calibrate_without_evidence(seeded: Session) -> None:
@@ -201,3 +191,17 @@ def test_retrain_happens_during_run_when_drifted(seeded: Session) -> None:
     after = seeded.query(PredictorModel).count()
     assert report.retrained is True
     assert after > before
+
+
+def test_retrained_model_keeps_origin_source(seeded: Session) -> None:
+    from launcher.predictor import active_model
+
+    model = train_predictor(seeded, "proj", SyntheticOutcomeSource(n=300))
+    ref = model.training_winner_share
+    run_calibration(
+        seeded,
+        "proj",
+        SyntheticOutcomeSource(n=300, winner_share=min(ref * 2.0, 0.95)),
+    )
+    assert active_model(seeded, "proj") is not None
+    assert active_model(seeded, "proj").source == "SyntheticOutcomeSource"

@@ -259,6 +259,18 @@ def test_try_rewrite_captures_budget_as_error(seeded: Session) -> None:
     assert "cap" in attempt.error.lower()
 
 
+def test_try_rewrite_captures_provider_error(seeded: Session) -> None:
+    class BoomProvider(FakeProvider):
+        def generate(self, draft_text: str, n: int) -> GenerationResult:
+            raise ProviderError("llm exploded")
+
+    draft = seeded.query(Draft).one()
+    attempt = try_rewrite_flow(seeded, draft.id, BoomProvider(["x"]), n=1)
+    assert attempt.result is None
+    assert attempt.error is not None
+    assert "exploded" in attempt.error
+
+
 def test_try_rewrite_reraises_missing_draft(seeded: Session) -> None:
     with pytest.raises(ValueError):
         try_rewrite_flow(seeded, 9999, FakeProvider([]), n=1)

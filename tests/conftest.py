@@ -5,6 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from launcher.models import Base
+from launcher.seed import seed_all
 
 
 @pytest.fixture()
@@ -17,3 +18,10 @@ def session() -> Session:
         yield s
     finally:
         s.close()
+
+
+@pytest.fixture()
+def seeded(session: Session) -> Session:
+    seed_all(session)
+    session.commit()
+    return session

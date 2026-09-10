@@ -58,8 +58,9 @@ class CalibrationReport:
 class _StaticSource:
     """In-memory rows as a source, for retraining on calibration evidence."""
 
-    def __init__(self, rows: list[OutcomeRow]) -> None:
+    def __init__(self, rows: list[OutcomeRow], *, origin: str = "memory") -> None:
         self._rows = rows
+        self.origin = origin
 
     @property
     def provenance(self) -> str:
@@ -188,7 +189,9 @@ def run_calibration(
 
     retrained = False
     if model is not None and decision.retrain:
-        train_predictor(session, project_id, _StaticSource(rows))
+        train_predictor(
+            session, project_id, _StaticSource(rows, origin=type(source).__name__)
+        )
         retrained = True
         model = active_model(session, project_id)
 

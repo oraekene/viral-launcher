@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 from launcher.features import extract
 from launcher.models import PredictorModel, Swatch
 from launcher.outcomes import SyntheticOutcomeSource
-from launcher.params import seed_params
 from launcher.predictor import (
     FEATURE_NAMES,
     feature_values,
@@ -14,16 +13,7 @@ from launcher.predictor import (
     train_predictor,
 )
 from launcher.rewriter import HeuristicProvider, rewrite_flow
-from launcher.rules_seed import seed_rules
 from launcher.similarity import SwatchCorpus, format_similarity
-
-
-@pytest.fixture()
-def seeded(session: Session) -> Session:
-    seed_params(session)
-    seed_rules(session)
-    session.commit()
-    return session
 
 
 def test_identical_texts_score_full_overlap() -> None:
@@ -59,12 +49,12 @@ def test_feature_values_include_swatch_similarity(seeded: Session) -> None:
     assert set(FEATURE_NAMES) == set(values.keys())
 
 
-def test_similarity_against_archived_swatches(session: Session) -> None:
+def test_similarity_against_archived_swatches(seeded: Session) -> None:
     from launcher.models import Draft
     from launcher.similarity import max_swatch_similarity
     from launcher.swipes import archive_swatch
 
-    seed_params(session)
+    session = seeded
     draft_text = "Distribution beats marketing every single time. What would you add?"
     draft = Draft(text=draft_text, project_id="proj")
     session.add(draft)
