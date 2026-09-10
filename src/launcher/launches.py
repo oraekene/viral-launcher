@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from sqlalchemy.orm import Session
 
 from launcher.drafts import DraftStore
-from launcher.features import extract
+from launcher.features import extract_for
 from launcher.models import LaunchEvent
 from launcher.scoring import resolve_score
 
@@ -52,12 +52,16 @@ def register_launch(
     candidate = DraftStore(session).resolve_candidate(draft_id, variant_id)
     draft, text = candidate.draft, candidate.text
 
-    features = extract(
-        text,
+    features = extract_for(
+        session,
+        text=text,
+        project_id=draft.project_id,
         author_followers=draft.author_followers,
         mutuals_count=draft.mutuals_count,
         scheduled_at=draft.scheduled_at,
         allow_premium_length=draft.allow_premium_length,
+        media=tuple(draft.media or ()),
+        topics=tuple(draft.topics or ()),
     )
     scored = resolve_score(session, draft.project_id, features, text)
 

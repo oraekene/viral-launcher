@@ -269,3 +269,67 @@ def test_migration_adds_missing_columns() -> None:
         )
     )
     session.commit()
+
+
+def test_relay_rows_carry_zero_media_until_reader_parses_entities(
+    seeded: Session,
+) -> None:
+    rows = normalize_own_posts(seeded, "voice-a", [_tweet(0, CLEAN)])
+    assert rows[0].features["media_photo"] == 0.0
+    assert rows[0].features["media_video"] == 0.0
+
+
+def test_bind_normalizes_and_limits_topics(seeded: Session) -> None:
+    row = bind_voice(
+        seeded, VoiceKey("user-1", "ascully789"), "voice-a", topics=[" AI ", "Cooking"]
+    )
+    assert row.topics == ["ai", "cooking"]
+    with pytest.raises(ValueError, match="32 chars"):
+        bind_voice(seeded, VoiceKey("user-1", "ascully789"), "voice-a", topics=["x" * 33])
+
+
+def test_extract_for_carries_voice_lanes(seeded: Session) -> None:
+    from launcher.features import extract_for
+
+    bind_voice(seeded, VoiceKey("user-1", "ascully789"), "voice-a", topics=["ai"])
+    f = extract_for(seeded, text=CLEAN, project_id="voice-a", topics=["dating"])
+    assert f.voice_topics == ("ai",)
+    assert f.topics == ("dating",)
+    unbound = extract_for(seeded, text=CLEAN, project_id="ghost", topics=["dating"])
+    assert unbound.voice_topics is None
+
+
+def test_migration_adds_media_topic_columns() -> None:
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from launcher.db import init_db
+    from launcher.models import Draft, VoiceBinding
+
+    engine = create_engine("sqlite://")
+    with engine.connect() as conn:
+        conn.exec_driver_sql(
+            "CREATE TABLE drafts (id INTEGER PRIMARY KEY, project_id VARCHAR(64), "
+            "text VARCHAR(4000), author_followers INTEGER, mutuals_count INTEGER, "
+            "scheduled_at DATETIME, allow_premium_length BOOLEAN, verdict VARCHAR(32), "
+            "gate_report JSON, created_at DATETIME)"
+        )
+        conn.exec_driver_sql(
+            "CREATE TABLE voice_bindings (id INTEGER PRIMARY KEY, "
+            "worker_user_id VARCHAR(64), screen_name VARCHAR(64), "
+            "project_id VARCHAR(64), viral_floor REAL, viral_threshold REAL, "
+            "created_at DATETIME)"
+        )
+        conn.commit()
+    init_db(engine)
+    with engine.connect() as conn:
+        draft_cols = [row[1] for row in conn.exec_driver_sql("PRAGMA table_info(drafts)").all()]
+        voice_cols = [row[1] for row in conn.exec_driver_sql("PRAGMA table_info(voice_bindings)").all()]
+    assert {"media", "topics"} <= set(draft_cols)
+    assert "topics" in voice_cols
+    session = sessionmaker(bind=engine)()
+    session.add(Draft(text="hi", media=["photo"], topics=["ai"]))
+    session.add(
+        VoiceBinding(worker_user_id="u", screen_name="s", project_id="p", topics=["ai"])
+    )
+    session.commit()

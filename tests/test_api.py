@@ -321,7 +321,7 @@ def test_voices_bind_list_and_rebind(client: TestClient) -> None:
     assert created.status_code == 201
     listed = client.get("/voices", params={"worker_user_id": "user-1"}).json()
     assert listed == [
-        {"worker_user_id": "user-1", "screen_name": "ascully789", "project_id": "voice-a", "viral_floor": None, "viral_threshold": None}
+        {"worker_user_id": "user-1", "screen_name": "ascully789", "project_id": "voice-a", "viral_floor": None, "viral_threshold": None, "topics": None}
     ]
     client.post(
         "/voices",
@@ -357,3 +357,61 @@ def test_relay_sync_without_binding_is_422(client: TestClient) -> None:
     )
     assert resp.status_code == 422
     assert "no voice binding" in resp.json()["detail"]
+
+
+def test_draft_media_topics_roundtrip_and_validation(client: TestClient) -> None:
+    created = client.post(
+        "/drafts",
+        json={"text": CLEAN_DRAFT, "media": ["photo"], "topics": ["AI "]},
+    )
+    assert created.status_code == 201, created.text
+    body = created.json()
+    assert body["media"] == ["photo"]
+    assert body["topics"] == ["ai"]
+    assert any(l["rule_id"] == "media.attached" for l in body["gate_report"])
+    assert any(l["rule_id"] == "network.topic_lane" for l in body["gate_report"])
+    bad_media = client.post(
+        "/drafts", json={"text": CLEAN_DRAFT, "media": ["p", "p", "p", "p", "p"]}
+    )
+    assert bad_media.status_code == 422
+    bad_kind = client.post("/drafts", json={"text": CLEAN_DRAFT, "media": ["audio"]})
+    assert bad_kind.status_code == 422
+    bad_topics = client.post(
+        "/drafts", json={"text": CLEAN_DRAFT, "topics": ["a", "b", "c", "d"]}
+    )
+    assert bad_topics.status_code == 422
+    blank_topic = client.post("/drafts", json={"text": CLEAN_DRAFT, "topics": ["  "]})
+    assert blank_topic.status_code == 422
+
+
+def test_voice_topics_flow_into_scoring(client: TestClient) -> None:
+    client.post(
+        "/voices",
+        json={
+            "worker_user_id": "user-1",
+            "screen_name": "ascully789",
+            "project_id": "voice-a",
+            "topics": ["AI"],
+        },
+    )
+    on_lane = client.post(
+        "/drafts", json={"text": CLEAN_DRAFT, "project_id": "voice-a", "topics": ["ai"]}
+    ).json()
+    lane = next(l for l in on_lane["gate_report"] if l["rule_id"] == "network.topic_lane")
+    assert lane["verdict"] == "pass"
+    off_lane = client.post(
+        "/drafts",
+        json={"text": CLEAN_DRAFT, "project_id": "voice-a", "topics": ["dating"]},
+    ).json()
+    lane = next(l for l in off_lane["gate_report"] if l["rule_id"] == "network.topic_lane")
+    assert lane["verdict"] == "warn"
+    bad_voice_topics = client.post(
+        "/voices",
+        json={
+            "worker_user_id": "user-1",
+            "screen_name": "ascully789",
+            "project_id": "voice-a",
+            "topics": ["x" * 33],
+        },
+    )
+    assert bad_voice_topics.status_code == 422

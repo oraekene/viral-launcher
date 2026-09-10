@@ -65,7 +65,16 @@ def test_similarity_against_archived_swatches(seeded: Session) -> None:
 def test_v2_model_trains_with_new_feature(seeded: Session) -> None:
     model = train_predictor(seeded, "proj", SyntheticOutcomeSource(n=300))
     assert "swatch_similarity" in model.feature_names
-    assert model.algorithm.endswith(".v2")
+
+
+def test_v3_model_trains_with_media_features(seeded: Session) -> None:
+    from launcher.predictor import ALGORITHM
+
+    model = train_predictor(seeded, "proj", SyntheticOutcomeSource(n=300))
+    assert model.algorithm == ALGORITHM
+    assert model.algorithm.endswith(".v3")
+    assert "media_photo" in model.feature_names
+    assert "media_video" in model.feature_names
 
 
 def test_old_v1_artifact_still_scores(seeded: Session) -> None:

@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from launcher.cost import BudgetExceeded
 from launcher.drafts import score_draft as score_draft_service
-from launcher.features import extract
+from launcher.features import extract_for, normalize_topics
 from launcher.gate import load_engine
 from launcher.labels import label_warnings
 from launcher.models import CostEvent, Draft, DraftVariant
@@ -24,6 +24,8 @@ class DraftIn(BaseModel):
     project_id: str | None = Field(default=None, max_length=64)
     author_followers: int | None = None
     mutuals_count: int | None = None
+    media: list[Literal["photo", "video", "gif"]] = Field(default_factory=list, max_length=4)
+    topics: list[str] = Field(default_factory=list, max_length=3)
     scheduled_at: datetime | None = None
     allow_premium_length: bool = False
 
@@ -41,6 +43,8 @@ class DraftOut(BaseModel):
     verdict: str | None
     gate_report: list[GateLineOut]
     label_warnings: list[str]
+    media: list[str]
+    topics: list[str]
     created_at: datetime
 
 
@@ -114,6 +118,8 @@ def _draft_out(draft: Draft, warnings: list[str] | None = None) -> DraftOut:
         verdict=draft.verdict,
         gate_report=[GateLineOut(**line) for line in (draft.gate_report or [])],
         label_warnings=warnings or [],
+        media=list(draft.media or []),
+        topics=list(draft.topics or []),
         created_at=draft.created_at,
     )
 
@@ -154,13 +160,24 @@ def build_drafts_router(
         if tenant is not None and data.project_id is None:
             raise HTTPException(status_code=422, detail="project_id is required")
         require_project(session, tenant, data.project_id)
+        for topic in data.topics:
+            if not topic.strip() or len(topic) > 32:
+                raise HTTPException(
+                    status_code=422, detail="topics must be 1-32 chars each"
+                )
+        media = list(data.media)
+        topics = normalize_topics(data.topics)
         engine = load_engine(session)
-        features = extract(
-            data.text,
+        features = extract_for(
+            session,
+            text=data.text,
+            project_id=data.project_id,
             author_followers=data.author_followers,
             mutuals_count=data.mutuals_count,
             scheduled_at=data.scheduled_at,
             allow_premium_length=data.allow_premium_length,
+            media=media,
+            topics=topics,
         )
         report = engine.evaluate(features)
         draft = Draft(
@@ -168,6 +185,8 @@ def build_drafts_router(
             project_id=data.project_id,
             author_followers=data.author_followers,
             mutuals_count=data.mutuals_count,
+            media=media,
+            topics=topics,
             scheduled_at=data.scheduled_at,
             allow_premium_length=data.allow_premium_length,
             verdict=report.verdict,

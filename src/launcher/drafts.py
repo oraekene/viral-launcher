@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
-from launcher.features import extract
+from launcher.features import extract_for
 from launcher.gate import GateReport, load_engine
 from launcher.models import Draft, DraftVariant
 from launcher.scoring import ScoredScore, resolve_score
@@ -65,12 +65,16 @@ class DraftScore:
 def score_draft(session: Session, draft_id: int) -> DraftScore:
     """Score a draft without HTTP — the drafts-domain service entry point."""
     draft = get_draft_or_raise(session, draft_id)
-    features = extract(
-        draft.text,
+    features = extract_for(
+        session,
+        text=draft.text,
+        project_id=draft.project_id,
         author_followers=draft.author_followers,
         mutuals_count=draft.mutuals_count,
         scheduled_at=draft.scheduled_at,
         allow_premium_length=draft.allow_premium_length,
+        media=tuple(draft.media or ()),
+        topics=tuple(draft.topics or ()),
     )
     return DraftScore(
         report=load_engine(session).evaluate(features),

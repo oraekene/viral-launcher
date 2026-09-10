@@ -30,10 +30,12 @@ FEATURE_NAMES: tuple[str, ...] = (
     "log_followers",
     "mutuals",
     "premium_length",
+    "media_photo",
+    "media_video",
     "swatch_similarity",
 )
 
-ALGORITHM = "gradient_boosting_regressor.v2"
+ALGORITHM = "gradient_boosting_regressor.v3"
 MIN_EVENTS = 200
 
 
@@ -64,6 +66,10 @@ def feature_values(
             float(features.mutuals_count) if features.mutuals_count is not None else 0.0
         ),
         "premium_length": 1.0 if features.allow_premium_length else 0.0,
+        "media_photo": 1.0 if "photo" in set(features.media_types) else 0.0,
+        "media_video": (
+            1.0 if set(features.media_types) & {"video", "gif"} else 0.0
+        ),
         "swatch_similarity": swatch_similarity,
     }
 

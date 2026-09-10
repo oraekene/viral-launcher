@@ -29,7 +29,6 @@ def test_clean_draft_passes(engine: GateEngine) -> None:
     assert report.verdict == "passed"
     assert all(line.verdict != "veto" for line in report.lines)
 
-
 def test_every_line_names_its_source(engine: GateEngine) -> None:
     f = extract(CLEAN_DRAFT)
     report = engine.evaluate(f)
@@ -217,3 +216,44 @@ def test_reseed_refreshes_copy_preserves_enabled(session: Session) -> None:
 
 def test_rule_seed_covers_negatives_first() -> None:
     assert RULE_SEED[0].name.startswith("negative.")
+
+
+def test_media_rule_names_attachment_without_verdict_impact(
+    engine: GateEngine,
+) -> None:
+    bare = engine.evaluate(extract(CLEAN_DRAFT))
+    assert bare.verdict == "passed"
+    media_line = next(l for l in bare.lines if l.rule_id == "media.attached")
+    assert media_line.verdict == "info"
+    assert "no media" in media_line.detail
+    attached = engine.evaluate(extract(CLEAN_DRAFT, media=["photo", "video"]))
+    assert attached.verdict == "passed"
+    detail = next(l for l in attached.lines if l.rule_id == "media.attached").detail
+    assert "photo" in detail and "video" in detail
+
+
+def test_topic_lane_warns_only_on_disjoint_declared_lanes(
+    engine: GateEngine,
+) -> None:
+    undeclared = engine.evaluate(extract(CLEAN_DRAFT, topics=["ai"]))
+    assert next(l for l in undeclared.lines if l.rule_id == "network.topic_lane").verdict == "info"
+    overlap = engine.evaluate(
+        extract(CLEAN_DRAFT, topics=["ai"], voice_topics=["ai", "cooking"])
+    )
+    assert next(l for l in overlap.lines if l.rule_id == "network.topic_lane").verdict == "pass"
+    disjoint = engine.evaluate(
+        extract(CLEAN_DRAFT, topics=["dating"], voice_topics=["ai"])
+    )
+    lane = next(l for l in disjoint.lines if l.rule_id == "network.topic_lane")
+    assert lane.verdict == "warn"
+    assert "x0.5" in lane.detail
+    assert disjoint.verdict == "passed_with_warnings"
+
+
+def test_new_author_coaching_names_impression_blindness(
+    engine: GateEngine,
+) -> None:
+    report = engine.evaluate(extract(CLEAN_DRAFT, author_followers=800))
+    boost = next(l for l in report.lines if l.rule_id == "author.new_boost")
+    assert "cannot see impression velocity" in boost.detail
+    assert "first-hour" in boost.detail

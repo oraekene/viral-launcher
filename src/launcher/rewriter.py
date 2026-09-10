@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from launcher.config import Settings
 from launcher.cost import BudgetExceeded, CostMeter
-from launcher.features import extract
+from launcher.features import extract_for
 from launcher.gate import load_engine
 from launcher.models import Draft, DraftVariant
 from launcher.params import ParamStore
@@ -303,11 +303,17 @@ def rewrite_flow(
     vetoed_count = 0
 
     for idx, text in enumerate(candidates):
-        features = extract(
-            text,
+        # Variants are text-only; they inherit the draft's declared media
+        # and topics, which is what actually publishes alongside them (#8).
+        features = extract_for(
+            session,
+            text=text,
+            project_id=draft.project_id,
             author_followers=draft.author_followers,
             mutuals_count=draft.mutuals_count,
             allow_premium_length=draft.allow_premium_length,
+            media=tuple(draft.media or ()),
+            topics=tuple(draft.topics or ()),
         )
         report = engine.evaluate(features)
         vetoed = report.verdict == "vetoed"

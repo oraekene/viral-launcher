@@ -45,6 +45,8 @@ class Draft(Base):
     text: Mapped[str] = mapped_column(String(4000))
     author_followers: Mapped[int | None] = mapped_column(Integer, nullable=True)
     mutuals_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    media: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    topics: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     allow_premium_length: Mapped[bool] = mapped_column(Boolean, default=False)
     verdict: Mapped[str | None] = mapped_column(String(32), nullable=True)
@@ -153,6 +155,7 @@ class VoiceBinding(Base):
     project_id: Mapped[str] = mapped_column(String(64), index=True)
     viral_floor: Mapped[float | None] = mapped_column(Float, nullable=True)
     viral_threshold: Mapped[float | None] = mapped_column(Float, nullable=True)
+    topics: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 

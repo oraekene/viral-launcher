@@ -26,6 +26,9 @@ def init_db(engine: Engine) -> None:
         ensure_column(engine, "voice_bindings", "viral_threshold", "REAL")
         ensure_column(engine, "radar_outcomes_stage", "engagement", "REAL")
         ensure_column(engine, "account_labels", "worker_user_id", "VARCHAR(64)")
+        ensure_column(engine, "drafts", "media", "JSON")
+        ensure_column(engine, "drafts", "topics", "JSON")
+        ensure_column(engine, "voice_bindings", "topics", "JSON")
 
 
 def ensure_column(engine: Engine, table: str, column: str, ddl: str) -> None:

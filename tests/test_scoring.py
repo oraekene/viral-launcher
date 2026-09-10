@@ -71,3 +71,62 @@ def test_vetoed_features_are_never_scored_here_by_convention(
     bait = extract("Like if you agree!")
     result = interim_score(bait, store)
     assert result.score == 0.0
+
+
+def test_photo_and_video_add_expansion_weights(session: Session) -> None:
+    store = _store(session)
+    base = interim_score(extract("Distribution beats marketing."), store)
+    photo = interim_score(
+        extract("Distribution beats marketing.", media=["photo"]), store
+    )
+    video = interim_score(
+        extract("Distribution beats marketing.", media=["video"]), store
+    )
+    assert photo.score == base.score + 0.05
+    assert video.score == base.score + 0.05
+    joined = " ".join(photo.reasons)
+    assert "weight.photo_expand" in joined
+    assert "weight.video_open" in " ".join(video.reasons)
+
+
+def test_absent_media_scores_exactly_as_before(session: Session) -> None:
+    store = _store(session)
+    assert (
+        interim_score(extract("Distribution beats marketing."), store).score
+        == interim_score(
+            extract("Distribution beats marketing.", media=[], topics=[]), store
+        ).score
+    )
+
+
+def test_topic_factor_only_discounts_disjoint_declared_lanes(
+    session: Session,
+) -> None:
+    from launcher.scoring import resolve_score, topic_factor
+
+    store = _store(session)
+    assert topic_factor(extract("Hello."), store) == 1.0
+    assert (
+        topic_factor(
+            extract("Hello.", topics=["ai"], voice_topics=["cooking"]), store
+        )
+        == 0.5
+    )
+    assert (
+        topic_factor(extract("Hello.", topics=["ai"], voice_topics=["ai"]), store)
+        == 1.0
+    )
+    plain = resolve_score(session, None, extract("Distribution beats marketing every single time. What would you add?"), "t")
+    assert plain.scorer == "interim"
+    off_lane = resolve_score(
+        session,
+        None,
+        extract(
+            "Distribution beats marketing every single time. What would you add?",
+            topics=["dating"],
+            voice_topics=["ai"],
+        ),
+        "t",
+    )
+    assert off_lane.score == round(plain.score * 0.5, 4)
+    assert any("oon.topic_discount" in r for r in off_lane.reasons)

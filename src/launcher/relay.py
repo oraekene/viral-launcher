@@ -26,7 +26,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from launcher.calibration import CalibrationReport, run_calibration
-from launcher.features import extract
+from launcher.features import extract, normalize_topics
 from launcher.gate import load_engine
 from launcher.models import RadarOutcomeStage, VoiceBinding
 from launcher.outcomes import OutcomeRow, StagedOutcomeSource, project_floor, project_threshold, stage_radar_outcomes
@@ -201,13 +201,14 @@ def bind_voice(
     *,
     viral_floor: float | None = None,
     viral_threshold: float | None = None,
+    topics: list[str] | tuple[str, ...] | None = None,
 ) -> VoiceBinding:
     """Bind (or rebind) a Worker user + account to a launcher project.
 
     Voice to project stays 1:1 both ways (ADR-0001): a project already
     bound to another voice refuses the bind instead of silently merging.
-    A viral floor (#12) and threshold override (#3) ride along when
-    given; None leaves each unset.
+    A viral floor (#12), threshold override (#3), and topic lanes (#8)
+    ride along when given; None leaves each unset.
     """
     if not project_id.strip():
         raise ValueError("project_id is required")
@@ -215,6 +216,9 @@ def bind_voice(
         raise ValueError("viral_floor cannot be negative")
     if viral_threshold is not None and viral_threshold <= 0:
         raise ValueError("viral_threshold must be positive")
+    lanes = normalize_topics(topics) if topics is not None else None
+    if lanes is not None and any(len(t) > 32 for t in lanes):
+        raise ValueError("voice topics: 32 chars each")
     taken = (
         session.query(VoiceBinding)
         .filter(
@@ -237,6 +241,7 @@ def bind_voice(
             project_id=project_id,
             viral_floor=viral_floor,
             viral_threshold=viral_threshold,
+            topics=lanes,
         )
         session.add(row)
     else:
@@ -245,6 +250,8 @@ def bind_voice(
             row.viral_floor = viral_floor
         if viral_threshold is not None:
             row.viral_threshold = viral_threshold
+        if lanes is not None:
+            row.topics = lanes
     session.flush()
     return row
 

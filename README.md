@@ -76,6 +76,9 @@ POST /calibration/run | GET /calibration/status
 POST /outcomes/import           stage radar outcomes
 POST /outcomes/relay-sync       stage relay-observed own posts + rerun calibration
 POST /voices | GET /voices      bind + list Worker user+account to project voices
+  (voices accept optional topic lanes; drafts accept optional media
+  [photo|video|gif, max 4] and topics [max 3]; off-lane drafts score
+  x0.5 interim with a gate warning)
 POST /swatches | GET /swatches  archive + list format winners
 GET  /costs                     global summary
 GET  /rules | POST /rules/{id}/toggle

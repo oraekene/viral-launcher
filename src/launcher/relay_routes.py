@@ -19,6 +19,7 @@ class VoiceIn(BaseModel):
     project_id: str = Field(min_length=1, max_length=64)
     viral_floor: float | None = Field(default=None, ge=0.0)
     viral_threshold: float | None = Field(default=None, gt=0.0)
+    topics: list[str] | None = Field(default=None)
 
 
 class VoiceOut(BaseModel):
@@ -27,6 +28,7 @@ class VoiceOut(BaseModel):
     project_id: str
     viral_floor: float | None
     viral_threshold: float | None
+    topics: list[str] | None
 
 
 class RelayTweetIn(BaseModel):
@@ -66,6 +68,11 @@ def build_relay_router(
         tenant: TenantId = Depends(tenant_dep),
     ) -> VoiceOut:
         require_owner(tenant, data.worker_user_id)
+        for topic in data.topics or []:
+            if not topic.strip() or len(topic) > 32:
+                raise HTTPException(
+                    status_code=422, detail="voice topics must be 1-32 chars each"
+                )
         try:
             row = bind_voice(
                 session,
@@ -73,6 +80,7 @@ def build_relay_router(
                 data.project_id,
                 viral_floor=data.viral_floor,
                 viral_threshold=data.viral_threshold,
+                topics=data.topics,
             )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -82,6 +90,7 @@ def build_relay_router(
             project_id=row.project_id,
             viral_floor=row.viral_floor,
             viral_threshold=row.viral_threshold,
+            topics=row.topics,
         )
 
     @router.get("/voices", response_model=list[VoiceOut])
@@ -102,6 +111,7 @@ def build_relay_router(
                 project_id=r.project_id,
                 viral_floor=r.viral_floor,
                 viral_threshold=r.viral_threshold,
+                topics=r.topics,
             )
             for r in query.limit(500).all()
         ]

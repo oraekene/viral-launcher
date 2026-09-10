@@ -5,7 +5,7 @@ from typing import Callable, Literal, NamedTuple
 
 from sqlalchemy.orm import Session
 
-from launcher.features import DraftFeatures
+from launcher.features import DraftFeatures, topic_lane
 from launcher.models import GateRule
 from launcher.params import ParamStore
 
@@ -122,7 +122,8 @@ def _rule_new_boost(f: DraftFeatures, store: ParamStore) -> tuple[LineVerdict, s
         return "info", (
             f"account at {f.author_followers} followers (cap {cap}); the lift "
             "keys off impressions (<~1000), surfacing new voices near the top "
-            f"slots; {diversity_note}"
+            "slots; the model cannot see impression velocity pre-publish, so "
+            f"check first-hour response manually; {diversity_note}"
         )
     return "pass", (
         f"account at {f.author_followers} followers (above cold-start cap {cap}); "
@@ -150,6 +151,34 @@ def _rule_timing(f: DraftFeatures, store: ParamStore) -> tuple[LineVerdict, str]
     return "info", (
         f"posting immediately; stay available for the first-hour window "
         f"(~{hl} min half-life)"
+    )
+
+
+def _rule_media(f: DraftFeatures, store: ParamStore) -> tuple[LineVerdict, str]:
+    if not f.media_types:
+        return "info", "no media attached; photo/video expansion weights unearned"
+    w_photo = store.get_float("weight.photo_expand")
+    w_video = store.get_float("weight.video_open")
+    kinds = sorted(set(f.media_types))
+    return "info", (
+        f"media attached ({', '.join(kinds)}); photo expansion weighs "
+        f"{w_photo}, video open weighs {w_video}"
+    )
+
+
+def _rule_topic_lane(f: DraftFeatures, store: ParamStore) -> tuple[LineVerdict, str]:
+    lane = topic_lane(f.topics, f.voice_topics)
+    if lane == "undeclared":
+        return "info", "no topic lane to judge; filed without lane discount"
+    if lane == "overlap":
+        return "pass", (
+            f"topics {sorted(set(f.topics) & set(f.voice_topics or ()))} overlap "
+            f"voice lanes {sorted(f.voice_topics or ())}; no lane discount"
+        )
+    discount = store.get_float("oon.topic_discount")
+    return "warn", (
+        f"topics {sorted(f.topics)} miss voice lanes {sorted(f.voice_topics or ())}; "
+        f"interim score discounted x{discount}"
     )
 
 
@@ -248,6 +277,18 @@ RULE_SEED: tuple[RuleSpec, ...] = (
         _rule_timing,
         "half_life.minutes",
         "Median half-life ~80 min (arXiv:2302.09654); AgeFilter stops serving posts after 48h",
+    ),
+    RuleSpec(
+        "media.attached",
+        _rule_media,
+        "weight.photo_expand",
+        "Photo expansion 0.05, video open 0.05 (x-algorithm param.rs, read 2026-09-10); GIFs ride the video head",
+    ),
+    RuleSpec(
+        "network.topic_lane",
+        _rule_topic_lane,
+        "oon.topic_discount",
+        "Off-lane drafts score x0.5 interim (house prior, issue #8); overlap or undeclared lanes score unchanged",
     ),
 )
 
