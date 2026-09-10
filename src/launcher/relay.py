@@ -29,9 +29,9 @@ from launcher.calibration import CalibrationReport, run_calibration
 from launcher.features import extract
 from launcher.gate import load_engine
 from launcher.models import VoiceBinding
-from launcher.outcomes import OutcomeRow, StagedOutcomeSource, project_floor, stage_radar_outcomes
+from launcher.outcomes import OutcomeRow, StagedOutcomeSource, project_floor, project_threshold, stage_radar_outcomes
 from launcher.params import ParamStore
-from launcher.predictor import active_model, feature_values
+from launcher.predictor import feature_values
 from launcher.similarity import max_swatch_similarity
 
 
@@ -85,15 +85,6 @@ def _voice_row(session: Session, key: VoiceKey) -> VoiceBinding | None:
     )
 
 
-def _flag_threshold(session: Session, project_id: str) -> float:
-    """Value-flag bar: the voice's calibrated trigger when fitted,
-    else the house default. Per-voice override lands in #3."""
-    model = active_model(session, project_id)
-    if model is not None and model.calibrated_z_trigger is not None:
-        return model.calibrated_z_trigger
-    return ParamStore(session).get_float("z.trigger")
-
-
 def normalize_own_posts(
     session: Session,
     project_id: str,
@@ -128,7 +119,7 @@ def normalize_own_posts(
     tweets = unique
     store = ParamStore(session)
     engine = load_engine(session)
-    threshold = _flag_threshold(session, project_id)
+    threshold = project_threshold(session, project_id)
     prepared: list[tuple[dict[str, float], tuple[str, ...]]] = []
     values: list[float] = []
     for tweet in tweets:
@@ -165,18 +156,26 @@ def normalize_own_posts(
 
 
 def bind_voice(
-    session: Session, key: VoiceKey, project_id: str, *, viral_floor: float | None = None
+    session: Session,
+    key: VoiceKey,
+    project_id: str,
+    *,
+    viral_floor: float | None = None,
+    viral_threshold: float | None = None,
 ) -> VoiceBinding:
     """Bind (or rebind) a Worker user + account to a launcher project.
 
     Voice to project stays 1:1 both ways (ADR-0001): a project already
     bound to another voice refuses the bind instead of silently merging.
-    A viral floor rides along when given (#12); None leaves it unset.
+    A viral floor (#12) and threshold override (#3) ride along when
+    given; None leaves each unset.
     """
     if not project_id.strip():
         raise ValueError("project_id is required")
     if viral_floor is not None and viral_floor < 0:
         raise ValueError("viral_floor cannot be negative")
+    if viral_threshold is not None and viral_threshold <= 0:
+        raise ValueError("viral_threshold must be positive")
     taken = (
         session.query(VoiceBinding)
         .filter(
@@ -198,12 +197,15 @@ def bind_voice(
             screen_name=key.screen_name,
             project_id=project_id,
             viral_floor=viral_floor,
+            viral_threshold=viral_threshold,
         )
         session.add(row)
     else:
         row.project_id = project_id
         if viral_floor is not None:
             row.viral_floor = viral_floor
+        if viral_threshold is not None:
+            row.viral_threshold = viral_threshold
     session.flush()
     return row
 

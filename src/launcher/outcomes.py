@@ -203,6 +203,27 @@ def project_floor(session: Session, project_id: str) -> float | None:
     return binding.viral_floor if binding is not None else None
 
 
+def project_threshold(session: Session, project_id: str) -> float:
+    """Flag bar for one voice (#3, ADR-0007): the declared override when
+    set, else the voice's calibrated trigger when fitted, else the 2.5
+    house default. Declaration is the prior, refit is the posterior."""
+    from launcher.models import PredictorModel, VoiceBinding
+    from launcher.params import ParamStore
+
+    binding = session.query(VoiceBinding).filter_by(project_id=project_id).one_or_none()
+    if binding is not None and binding.viral_threshold is not None:
+        return binding.viral_threshold
+    model = (
+        session.query(PredictorModel)
+        .filter_by(project_id=project_id)
+        .order_by(PredictorModel.trained_at.desc(), PredictorModel.id.desc())
+        .first()
+    )
+    if model is not None and model.calibrated_z_trigger is not None:
+        return model.calibrated_z_trigger
+    return ParamStore(session).get_float("z.trigger")
+
+
 def stage_radar_outcomes(
     session: Session,
     project_id: str,

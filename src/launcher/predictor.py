@@ -10,8 +10,7 @@ from sqlalchemy.orm import Session
 from launcher.features import DraftFeatures
 from launcher.metrics import precision_recall
 from launcher.models import PredictorModel
-from launcher.outcomes import OutcomeRow, OutcomeSource
-from launcher.params import ParamStore
+from launcher.outcomes import OutcomeRow, OutcomeSource, project_threshold
 
 FEATURE_NAMES: tuple[str, ...] = (
     "char_len",
@@ -119,8 +118,7 @@ def train_predictor(
             f"need >= {MIN_EVENTS} labeled events, got {len(rows)}"
         )
 
-    store = ParamStore(session)
-    trigger = store.get_float("z.trigger")
+    trigger = project_threshold(session, project_id)
 
     X = [[row.features[name] for name in FEATURE_NAMES] for row in rows]
     y_z = [row.z60 for row in rows]

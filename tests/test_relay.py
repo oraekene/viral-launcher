@@ -191,3 +191,32 @@ def test_floor_passes_above_floor_hits(seeded: Session) -> None:
 def test_negative_floor_rejected(seeded: Session) -> None:
     with pytest.raises(ValueError, match="cannot be negative"):
         bind_voice(seeded, VoiceKey("user-1", "ascully789"), "voice-a", viral_floor=-1.0)
+
+
+def _mixed_batch() -> list[dict[str, object]]:
+    tweets = [_tweet(0, CLEAN), _tweet(1, CLEAN)]
+    tweets.append(_tweet(2, CLEAN, likes=50))
+    tweets.append(_tweet(3, CLEAN, likes=400, reposts=10, replies=20))
+    return tweets
+
+
+def test_two_voices_hold_different_thresholds(seeded: Session) -> None:
+    bind_voice(seeded, VoiceKey("user-1", "ascully789"), "voice-a", viral_threshold=0.5)
+    bind_voice(seeded, VoiceKey("user-1", "oraekene1"), "voice-b", viral_threshold=99.0)
+    loose = normalize_own_posts(seeded, "voice-a", _mixed_batch())
+    strict = normalize_own_posts(seeded, "voice-b", _mixed_batch())
+    assert [r.value_flag for r in loose] == [False, False, True, True]
+    assert [r.value_flag for r in strict] == [False, False, False, False]
+
+
+def test_override_beats_house_default(seeded: Session) -> None:
+    bind_voice(seeded, VoiceKey("user-1", "ascully789"), "voice-a", viral_threshold=0.5)
+    house = normalize_own_posts(seeded, "voice-c", _mixed_batch())
+    declared = normalize_own_posts(seeded, "voice-a", _mixed_batch())
+    assert [r.value_flag for r in house] == [False, False, False, True]
+    assert [r.value_flag for r in declared] == [False, False, True, True]
+
+
+def test_non_positive_threshold_rejected(seeded: Session) -> None:
+    with pytest.raises(ValueError, match="must be positive"):
+        bind_voice(seeded, VoiceKey("user-1", "ascully789"), "voice-a", viral_threshold=0.0)

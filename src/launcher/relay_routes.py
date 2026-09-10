@@ -16,6 +16,7 @@ class VoiceIn(BaseModel):
     screen_name: str = Field(min_length=1, max_length=64)
     project_id: str = Field(min_length=1, max_length=64)
     viral_floor: float | None = Field(default=None, ge=0.0)
+    viral_threshold: float | None = Field(default=None, gt=0.0)
 
 
 class VoiceOut(BaseModel):
@@ -23,6 +24,7 @@ class VoiceOut(BaseModel):
     screen_name: str
     project_id: str
     viral_floor: float | None
+    viral_threshold: float | None
 
 
 class RelayTweetIn(BaseModel):
@@ -63,6 +65,7 @@ def build_relay_router(
                 VoiceKey(data.worker_user_id, data.screen_name),
                 data.project_id,
                 viral_floor=data.viral_floor,
+                viral_threshold=data.viral_threshold,
             )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -71,6 +74,7 @@ def build_relay_router(
             screen_name=row.screen_name,
             project_id=row.project_id,
             viral_floor=row.viral_floor,
+            viral_threshold=row.viral_threshold,
         )
 
     @router.get("/voices", response_model=list[VoiceOut])
@@ -86,6 +90,7 @@ def build_relay_router(
                 screen_name=r.screen_name,
                 project_id=r.project_id,
                 viral_floor=r.viral_floor,
+                viral_threshold=r.viral_threshold,
             )
             for r in query.limit(500).all()
         ]

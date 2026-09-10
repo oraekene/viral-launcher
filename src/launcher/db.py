@@ -23,6 +23,7 @@ def init_db(engine: Engine) -> None:
     Base.metadata.create_all(engine)
     if engine.url.drivername.startswith("sqlite"):
         ensure_column(engine, "voice_bindings", "viral_floor", "REAL")
+        ensure_column(engine, "voice_bindings", "viral_threshold", "REAL")
 
 
 def ensure_column(engine: Engine, table: str, column: str, ddl: str) -> None:
