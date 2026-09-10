@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, LargeBinary, String
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, LargeBinary, String, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -130,6 +130,26 @@ class RadarOutcomeStage(Base):
     fired_vetoes: Mapped[list[str]] = mapped_column(JSON, default=list)
     features: Mapped[dict[str, float]] = mapped_column(JSON)
     imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class VoiceBinding(Base):
+    """Worker user + X account to launcher project mapping (ADR-0001).
+
+    One row per owned voice: the Worker's user_id plus the account's
+    screen_name resolve to the launcher project that voice calibrates.
+    Project ids stay opaque capability strings until tenancy lands (#5).
+    """
+
+    __tablename__ = "voice_bindings"
+    __table_args__ = (
+        UniqueConstraint("worker_user_id", "screen_name", name="uq_voice_owner"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    worker_user_id: Mapped[str] = mapped_column(String(64))
+    screen_name: Mapped[str] = mapped_column(String(64))
+    project_id: Mapped[str] = mapped_column(String(64), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class AccountLabel(Base):

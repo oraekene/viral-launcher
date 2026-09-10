@@ -23,6 +23,7 @@ from launcher.models import (
 )
 from launcher.params import ParamStore
 from launcher.models_routes import build_models_router
+from launcher.relay_routes import build_relay_router
 from launcher.rewriter import (
     VariantProvider,
     default_provider,
@@ -132,6 +133,7 @@ def create_app(
         build_drafts_router(get_session=get_session, get_provider=get_provider)
     )
     app.include_router(build_models_router(get_session=get_session))
+    app.include_router(build_relay_router(get_session=get_session))
     app.include_router(build_launches_router(get_session=get_session))
 
     @app.get("/rules", response_model=list[RuleOut])

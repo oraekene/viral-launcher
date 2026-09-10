@@ -300,3 +300,59 @@ def test_scheduling_beyond_48h_warns(client: TestClient) -> None:
     timing = lines["timing.engagement_window"]
     assert timing["verdict"] == "warn"
     assert "48" in timing["detail"]
+
+
+def _relay_tweet(i: int, **counts: int) -> dict[str, object]:
+    return {
+        "id": str(2000 + i),
+        "text": CLEAN_DRAFT,
+        "favorite_count": counts.get("likes", 10),
+        "retweet_count": counts.get("reposts", 0),
+        "reply_count": counts.get("replies", 0),
+    }
+
+
+def test_voices_bind_list_and_rebind(client: TestClient) -> None:
+    created = client.post(
+        "/voices",
+        json={"worker_user_id": "user-1", "screen_name": "ascully789", "project_id": "voice-a"},
+    )
+    assert created.status_code == 201
+    listed = client.get("/voices", params={"worker_user_id": "user-1"}).json()
+    assert listed == [
+        {"worker_user_id": "user-1", "screen_name": "ascully789", "project_id": "voice-a"}
+    ]
+    client.post(
+        "/voices",
+        json={"worker_user_id": "user-1", "screen_name": "ascully789", "project_id": "voice-b"},
+    )
+    relisted = client.get("/voices", params={"worker_user_id": "user-1"}).json()
+    assert relisted[0]["project_id"] == "voice-b"
+
+
+def test_relay_sync_stages_and_calibrates(client: TestClient) -> None:
+    client.post(
+        "/voices",
+        json={"worker_user_id": "user-1", "screen_name": "ascully789", "project_id": "voice-a"},
+    )
+    tweets = [_relay_tweet(i) for i in range(9)]
+    tweets += [_relay_tweet(9 + i, likes=200, reposts=5, replies=10) for i in range(3)]
+    resp = client.post(
+        "/outcomes/relay-sync",
+        json={"worker_user_id": "user-1", "screen_name": "ascully789", "tweets": tweets},
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["project_id"] == "voice-a"
+    assert body["staged"] == 12
+    assert body["calibration"]["n_outcomes"] == 12
+    assert body["calibration"]["calibrated"] is False
+
+
+def test_relay_sync_without_binding_is_422(client: TestClient) -> None:
+    resp = client.post(
+        "/outcomes/relay-sync",
+        json={"worker_user_id": "nobody", "screen_name": "ghost", "tweets": [_relay_tweet(0)]},
+    )
+    assert resp.status_code == 422
+    assert "no voice binding" in resp.json()["detail"]

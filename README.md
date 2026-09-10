@@ -57,6 +57,7 @@ launcher init
 launcher gate "Like if you agree!"                  # vetoed, with sources
 launcher rewrite "Draft text here." --n 5 --followers 800 --mutuals 4
 launcher batch drafts.json --rewrite --n 3
+launcher relay-sync relay-output.json   # stage own-post read + rerun calibration
 launcher serve --port 8000
 ```
 
@@ -73,6 +74,8 @@ POST /models/train | GET /models
 POST /launches + t=10 snapshots, interventions
 POST /calibration/run | GET /calibration/status
 POST /outcomes/import           stage radar outcomes
+POST /outcomes/relay-sync       stage relay-observed own posts + rerun calibration
+POST /voices | GET /voices      bind + list Worker user+account to project voices
 POST /swatches | GET /swatches  archive + list format winners
 GET  /costs                     global summary
 GET  /rules | POST /rules/{id}/toggle
@@ -100,8 +103,9 @@ virality guarantee. Anti-gaming rules are vetoes, not advice.
 
 All launcher-side edges are code-complete; only real data remains external:
 
-- **Predictor** trains on staged radar outcomes (`POST /outcomes/import`,
-  then `source=radar`) or on the deterministic synthetic corpus for dev.
+- **Predictor** trains on staged radar outcomes (`POST /outcomes/import`
+  or `POST /outcomes/relay-sync`, then `source=radar`) or on the
+  deterministic synthetic corpus for dev.
   Metrics from synthetic data say nothing about real-world quality.
 - **Post-publish loop** uses manual t=10 snapshot entry until the radar
   own-account variant exists; protocol evaluation is isolated so the

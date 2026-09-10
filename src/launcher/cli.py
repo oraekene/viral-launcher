@@ -102,6 +102,33 @@ def _batch_payload(settings: Settings, args: argparse.Namespace) -> dict[str, ob
     return {"results": results}
 
 
+def _relay_sync_payload(settings: Settings, args: argparse.Namespace) -> dict[str, object]:
+    from launcher.relay import relay_sync
+
+    payload = json.loads(Path(args.path).read_text(encoding="utf-8"))
+    with session_scope(settings) as session:
+        result = relay_sync(
+            session,
+            str(payload["worker_user_id"]),
+            str(payload["screen_name"]),
+            list(payload.get("tweets") or []),
+            author_followers=payload.get("author_followers"),
+            mutuals_count=payload.get("mutuals_count"),
+        )
+        session.commit()
+    report = result.report
+    return {
+        "project_id": result.project_id,
+        "staged": result.staged,
+        "calibrated": report.calibrated,
+        "applied": report.applied,
+        "n_outcomes": report.n_outcomes,
+        "winner_share": report.winner_share,
+        "new_z_trigger": report.new_z_trigger,
+        "reason": report.reason,
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="launcher")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -129,6 +156,11 @@ def main(argv: list[str] | None = None) -> int:
     p_batch.add_argument("--rewrite", action="store_true")
     p_batch.add_argument("--n", type=int, default=None)
 
+    p_sync = sub.add_parser(
+        "relay-sync", help="stage relay-observed own posts and rerun calibration"
+    )
+    p_sync.add_argument("path", help="JSON file: worker_user_id, screen_name, tweets")
+
     args = parser.parse_args(argv)
     settings = Settings.from_env()
 
@@ -147,6 +179,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "batch":
         print(json.dumps(_batch_payload(settings, args), indent=2))
+        return 0
+
+    if args.command == "relay-sync":
+        print(json.dumps(_relay_sync_payload(settings, args), indent=2))
         return 0
 
     if args.command == "serve":
