@@ -129,6 +129,7 @@ class RadarOutcomeStage(Base):
     value_flag: Mapped[bool] = mapped_column(Boolean)
     fired_vetoes: Mapped[list[str]] = mapped_column(JSON, default=list)
     features: Mapped[dict[str, float]] = mapped_column(JSON)
+    engagement: Mapped[float | None] = mapped_column(Float, nullable=True)
     imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 

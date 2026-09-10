@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 from sqlalchemy.orm import Session
 
+from launcher.models import RadarOutcomeStage
 from launcher.outcomes import StagedOutcomeSource
 from launcher.predictor import FEATURE_NAMES
 from launcher.relay import VoiceKey, bind_voice, engagement_value, normalize_own_posts, relay_sync, resolve_project
@@ -220,3 +221,59 @@ def test_override_beats_house_default(seeded: Session) -> None:
 def test_non_positive_threshold_rejected(seeded: Session) -> None:
     with pytest.raises(ValueError, match="must be positive"):
         bind_voice(seeded, VoiceKey("user-1", "ascully789"), "voice-a", viral_threshold=0.0)
+
+
+def _hot(i: int) -> dict[str, object]:
+    return _tweet(i, CLEAN, likes=200, reposts=50, replies=10)
+
+
+def test_window_flags_voice_outliers(seeded: Session) -> None:
+    key = VoiceKey("user-1", "ascully789")
+    bind_voice(seeded, key, "voice-a")
+    first = relay_sync(seeded, key, [_tweet(i, CLEAN) for i in range(100)])
+    assert first.staged == 100
+    engaged = [
+        r.engagement
+        for r in seeded.query(RadarOutcomeStage).filter_by(project_id="voice-a").all()
+    ]
+    assert engaged and all(e == 5.0 for e in engaged)
+    batch = [_hot(1000), _hot(1001), _hot(1002), _tweet(1003, CLEAN)]
+    result = relay_sync(seeded, key, batch)
+    assert result.staged == 4
+    rows = StagedOutcomeSource(seeded).load_outcomes("voice-a")[-4:]
+    assert [r.value_flag for r in rows] == [True, True, True, False]
+
+
+def test_thin_history_falls_back_to_batch(seeded: Session) -> None:
+    key = VoiceKey("user-1", "ascully789")
+    bind_voice(seeded, key, "voice-a")
+    relay_sync(seeded, key, [_tweet(i, CLEAN) for i in range(10)])
+    rows = normalize_own_posts(seeded, "voice-a", _mixed_batch())
+    assert [r.value_flag for r in rows] == [False, False, False, True]
+
+
+def test_migration_adds_missing_columns() -> None:
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from launcher.db import init_db
+
+    engine = create_engine("sqlite://")
+    with engine.connect() as conn:
+        conn.exec_driver_sql(
+            "CREATE TABLE radar_outcomes_stage (id INTEGER PRIMARY KEY, "
+            "project_id VARCHAR(64), z60 FLOAT, value_flag BOOLEAN, "
+            "fired_vetoes JSON, features JSON, imported_at DATETIME)"
+        )
+        conn.commit()
+    init_db(engine)
+    with engine.connect() as conn:
+        cols = [row[1] for row in conn.exec_driver_sql("PRAGMA table_info(radar_outcomes_stage)").all()]
+    assert "engagement" in cols
+    session = sessionmaker(bind=engine)()
+    session.add(
+        RadarOutcomeStage(
+            project_id="p", z60=1.0, value_flag=False, fired_vetoes=[], features={}, engagement=7.5
+        )
+    )
+    session.commit()

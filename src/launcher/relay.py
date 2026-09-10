@@ -28,7 +28,7 @@ from sqlalchemy.orm import Session
 from launcher.calibration import CalibrationReport, run_calibration
 from launcher.features import extract
 from launcher.gate import load_engine
-from launcher.models import VoiceBinding
+from launcher.models import RadarOutcomeStage, VoiceBinding
 from launcher.outcomes import OutcomeRow, StagedOutcomeSource, project_floor, project_threshold, stage_radar_outcomes
 from launcher.params import ParamStore
 from launcher.predictor import feature_values
@@ -85,6 +85,39 @@ def _voice_row(session: Session, key: VoiceKey) -> VoiceBinding | None:
     )
 
 
+WINDOW_MIN_HISTORY = 20
+WINDOW_SIZE = 100
+
+
+def _trailing_engagements(
+    session: Session, project_id: str, limit: int = WINDOW_SIZE
+) -> list[float]:
+    """Newest staged raw engagements for one voice, oldest dropped first."""
+    cells = (
+        session.query(RadarOutcomeStage.engagement)
+        .filter_by(project_id=project_id)
+        .filter(RadarOutcomeStage.engagement.is_not(None))
+        .order_by(RadarOutcomeStage.id.desc())
+        .limit(limit)
+        .all()
+    )
+    return [cell[0] for cell in cells if cell[0] is not None]
+
+
+def _window_reference(window: list[float]) -> tuple[float | None, float | None]:
+    """(median reference, p95 anomaly bar) for a voice with history.
+
+    Top ~5% of the trailing window counts as the relative anomaly
+    (Polito style, distribution-free). Under 20 rows the window says
+    nothing and the caller falls back to batch behavior.
+    """
+    if len(window) < WINDOW_MIN_HISTORY:
+        return None, None
+    ordered = sorted(window)
+    bar = ordered[min(len(ordered) - 1, int(0.95 * (len(ordered) - 1)))]
+    return statistics.median(ordered), bar
+
+
 def normalize_own_posts(
     session: Session,
     project_id: str,
@@ -96,14 +129,14 @@ def normalize_own_posts(
     """Relay tweet mappings to outcome rows for one voice.
 
     z60 is the natural log of each tweet's engagement multiple of the
-    batch median (#14, Dartmouth style): log-scale de-tails the
-    heavy-tailed counts so z-scores regain meaning, while the 2.5-scale
-    threshold stays meaningful (ln needs ~12x median). Zero engagement
-    or zero baseline yields 0.0. Relay rows are log-scale; do not mix
-    synthetic (raw-scale) rows into one voice's calibration.
-    The trailing window (#13) and absolute floor (#12) refine this later.
-    Repeat tweet ids in one batch stage once (cross-sync repeats stay
-    append-only, like import).
+    reference median (#14, Dartmouth style): the trailing-window median
+    once the voice holds 20 staged engagements (#13), else the batch
+    median as the house-default fallback. Zero engagement or zero
+    reference yields 0.0. Relay rows are log-scale; do not mix synthetic
+    (raw-scale) rows into one voice's calibration. The absolute floor
+    (#12) applies before any relative rule: sub-floor engagement never
+    flags. Repeat tweet ids in one batch stage once (cross-sync repeats
+    stay append-only, like import).
     """
     if not tweets:
         raise ValueError("no relay tweets to normalize")
@@ -138,18 +171,24 @@ def normalize_own_posts(
         prepared.append(
             (feature_values(features, max_swatch_similarity(session, project_id, text)), vetoes)
         )
-    baseline = statistics.median(values)
+    baseline_median = statistics.median(values)
+    window_median, window_bar = _window_reference(
+        _trailing_engagements(session, project_id)
+    )
+    reference = window_median if window_median is not None else baseline_median
     floor = project_floor(session, project_id)
     rows: list[OutcomeRow] = []
     for (vector, vetoes), value in zip(prepared, values):
-        z60 = round(math.log(value / baseline), 4) if value > 0 and baseline > 0 else 0.0
-        flagged = z60 >= threshold and (floor is None or value >= floor)
+        z60 = round(math.log(value / reference), 4) if value > 0 and reference > 0 else 0.0
+        anomaly = window_bar is None or value >= window_bar
+        flagged = z60 >= threshold and anomaly and (floor is None or value >= floor)
         rows.append(
             OutcomeRow(
                 features=vector,
                 z60=z60,
                 value_flag=flagged,
                 fired_vetoes=vetoes,
+                engagement=value,
             )
         )
     return rows
@@ -261,6 +300,7 @@ def relay_sync(
                 "z60": row.z60,
                 "value_flag": row.value_flag,
                 "fired_vetoes": list(row.fired_vetoes),
+                "engagement": row.engagement,
             }
             for row in rows
         ],

@@ -52,6 +52,7 @@ class OutcomeRow:
     z60: float
     value_flag: bool
     fired_vetoes: tuple[str, ...] = ()
+    engagement: float | None = None
 
 
 class OutcomeSource(Protocol):
@@ -164,6 +165,7 @@ class StagedOutcomeSource:
                 z60=r.z60,
                 value_flag=r.value_flag,
                 fired_vetoes=tuple(r.fired_vetoes or ()),
+                engagement=r.engagement,
             )
             for r in self._loader.load(project_id)
         ]
@@ -243,6 +245,7 @@ def stage_radar_outcomes(
             missing = sorted(required - keys)
             raise ValueError(f"row {i}: missing feature keys: {missing}")
         vetoes_raw = row.get("fired_vetoes") or []
+        engagement_raw = row.get("engagement")
         staged.append(
             RadarOutcomeStage(
                 project_id=project_id,
@@ -250,6 +253,7 @@ def stage_radar_outcomes(
                 value_flag=bool(row["value_flag"]),
                 fired_vetoes=[str(v) for v in vetoes_raw],
                 features={k: float(features[k]) for k in required},
+                engagement=float(engagement_raw) if engagement_raw is not None else None,
             )
         )
     session.add_all(staged)
