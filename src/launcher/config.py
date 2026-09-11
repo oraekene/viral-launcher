@@ -10,6 +10,8 @@ class Settings:
     llm_api_key: str | None
     llm_base_url: str
     llm_model: str
+    worker_base_url: str
+    worker_token: str | None
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -22,4 +24,6 @@ class Settings:
                 "LAUNCHER_LLM_BASE_URL", "https://api.openai.com/v1"
             ),
             llm_model=os.environ.get("LAUNCHER_LLM_MODEL", "gpt-4o-mini"),
+            worker_base_url=os.environ.get("LAUNCHER_WORKER_BASE_URL", ""),
+            worker_token=os.environ.get("LAUNCHER_WORKER_TOKEN"),
         )

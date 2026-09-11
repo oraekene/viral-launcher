@@ -150,6 +150,8 @@ def _llm_provider(seeded: Session) -> OpenAICompatProvider:
             llm_api_key="test-key",
             llm_base_url="https://llm.test",
             llm_model="test-model",
+            worker_base_url="",
+            worker_token=None,
         ),
         ParamStore(seeded),
     )

@@ -83,3 +83,14 @@ def test_unknown_command_exits_2(tmp_path: Path) -> None:
 def test_batch_missing_file_exits_nonzero(tmp_path: Path) -> None:
     proc = _run(tmp_path / "cli.db", "batch", str(tmp_path / "absent.json"))
     assert proc.returncode != 0
+
+
+def test_relay_commands_need_worker_config(tmp_path: Path) -> None:
+    db = tmp_path / "cli.db"
+    _run(db, "init")
+    enqueue = _run(db, "relay-enqueue", "relay-1", "voicea")
+    assert enqueue.returncode == 2
+    assert "LAUNCHER_WORKER_BASE_URL" in enqueue.stderr
+    collect = _run(db, "relay-collect", "relay-1", "user-a")
+    assert collect.returncode == 2
+    assert "LAUNCHER_WORKER_BASE_URL" in collect.stderr

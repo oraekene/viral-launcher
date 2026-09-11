@@ -58,8 +58,21 @@ launcher gate "Like if you agree!"                  # vetoed, with sources
 launcher rewrite "Draft text here." --n 5 --followers 800 --mutuals 4
 launcher batch drafts.json --rewrite --n 3
 launcher relay-sync relay-output.json   # stage own-post read + rerun calibration
+launcher relay-enqueue <relay> <handle>  # ask relay to read own posts (#18)
+launcher relay-collect <relay> <user> [--since N]  # sync done reads (#18)
 launcher serve --port 8000
 ```
+
+Live loop (#18) on cron, per bound voice: enqueue, wait a poll
+interval, then collect with the printed cursor as next `--since`:
+
+```
+0 * * * * launcher relay-enqueue <relay> <handle> && sleep 120 && launcher relay-collect <relay> <user> --since <cursor>
+```
+
+Needs `LAUNCHER_WORKER_BASE_URL` plus `LAUNCHER_WORKER_TOKEN`
+(operator Cloudflare Access JWT), a paired relay, and real
+SearchTimeline/UserTweets queryIds in the relay's `client.json`.
 
 HTTP API (see `/docs` when serving):
 

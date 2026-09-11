@@ -16,6 +16,7 @@ from launcher.gate import load_engine
 from launcher.models import Draft
 from launcher.params import ParamStore
 from launcher.rewriter import default_provider, rewrite_flow, try_rewrite_flow
+from launcher.worker import WorkerClient
 
 
 @contextmanager
@@ -137,6 +138,18 @@ def _relay_sync_payload(settings: Settings, args: argparse.Namespace) -> dict[st
     }
 
 
+def _worker_client(
+    settings: Settings, parser: argparse.ArgumentParser
+) -> WorkerClient:
+    from launcher.worker import WorkerConfig
+
+    if not settings.worker_base_url or not settings.worker_token:
+        parser.error("set LAUNCHER_WORKER_BASE_URL and LAUNCHER_WORKER_TOKEN first")
+    return WorkerClient(
+        WorkerConfig(base_url=settings.worker_base_url, api_token=settings.worker_token)
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="launcher")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -174,6 +187,19 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_token.add_argument("worker_user_id", help="Worker user id owning the token")
 
+    p_enqueue = sub.add_parser(
+        "relay-enqueue", help="ask the relay to read an account's own posts (#18)"
+    )
+    p_enqueue.add_argument("relay_id", help="Worker relay id to command")
+    p_enqueue.add_argument("screen_name", help="X account to read")
+
+    p_collect = sub.add_parser(
+        "relay-collect", help="sync completed relay reads into staged outcomes (#18)"
+    )
+    p_collect.add_argument("relay_id", help="Worker relay id to collect from")
+    p_collect.add_argument("worker_user_id", help="tenant owning the voices")
+    p_collect.add_argument("--since", type=int, default=0, help="completed_at cursor")
+
     args = parser.parse_args(argv)
     settings = Settings.from_env()
 
@@ -205,6 +231,52 @@ def main(argv: list[str] | None = None) -> int:
             token = issue_token(session, args.worker_user_id)
             session.commit()
         print(json.dumps({"worker_user_id": args.worker_user_id, "token": token}))
+        return 0
+
+    if args.command == "relay-enqueue":
+        from launcher.worker import WorkerError
+
+        client = _worker_client(settings, parser)
+        try:
+            command_id = client.enqueue_user_posts(args.relay_id, args.screen_name)
+        except WorkerError as exc:
+            parser.error(str(exc))
+        print(json.dumps({"command_id": command_id}))
+        return 0
+
+    if args.command == "relay-collect":
+        from launcher.worker import WorkerError, collect_relay_results
+
+        client = _worker_client(settings, parser)
+        with session_scope(settings) as session:
+            try:
+                collected = collect_relay_results(
+                    session,
+                    client,
+                    args.relay_id,
+                    args.worker_user_id,
+                    since=args.since,
+                )
+            except (WorkerError, ValueError) as exc:
+                parser.error(str(exc))
+            session.commit()
+        print(
+            json.dumps(
+                {
+                    "cursor": collected.cursor,
+                    "skipped": collected.skipped,
+                    "synced": [
+                        {
+                            "project_id": r.project_id,
+                            "staged": r.staged,
+                            "calibrated": r.report.calibrated,
+                        }
+                        for r in collected.synced
+                    ],
+                },
+                indent=2,
+            )
+        )
         return 0
 
     if args.command == "serve":
